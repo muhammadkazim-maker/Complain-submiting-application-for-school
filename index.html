@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="description" content="Student Complaint Tracker - Progressive Web App for recording and monitoring student complaints with severity scoring and green-to-red meter." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Complaint Tracker" />
+  
+  <title>Student Complaint Tracker | Hadi Education System</title>
+  
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Header / Desktop Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M12 8v4"/>
+            <path d="M12 16h.01"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1>Student Complaint Tracker</h1>
+          <p>Hadi Education System</p>
+        </div>
+      </div>
+
+      <!-- Desktop Navigation Links -->
+      <nav class="desktop-nav" aria-label="Desktop Navigation">
+        <button class="nav-link active" data-screen="records" id="desk-nav-records">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2"/>
+            <path d="M3 9h18"/>
+            <path d="M9 21V9"/>
+          </svg>
+          Student Records
+        </button>
+        <button class="nav-link" data-screen="add" id="desk-nav-add">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Add Complaint
+        </button>
+        <button class="nav-link" data-screen="master" id="desk-nav-master">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="3" y1="15" x2="21" y2="15"/>
+            <line x1="9" y1="3" x2="9" y2="21"/>
+            <line x1="15" y1="3" x2="15" y2="21"/>
+          </svg>
+          Master Sheet
+        </button>
+      </nav>
+
+      <!-- Quick Action Buttons -->
+      <div class="header-actions">
+        <button class="btn btn-outline btn-sm" id="btn-export-csv" title="Export Complaints to CSV">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export CSV
+        </button>
+        <button class="btn btn-outline btn-sm" id="btn-export-backup" title="Export Full JSON Backup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 16 12 12 8 16"/>
+            <line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+          </svg>
+          Backup
+        </button>
+        <button class="btn btn-outline btn-sm" id="btn-import-backup" title="Import JSON Backup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="8 17 12 21 16 17"/>
+            <line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
+          </svg>
+          Import
+        </button>
+        <input type="file" id="file-import-input" accept=".json" style="display: none;" />
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Body Content -->
+  <main class="main-content">
+    
+    <!-- ======================================================================
+         SCREEN 1: Student Records (Default Screen)
+         ====================================================================== -->
+    <section id="screen-records" class="screen active" aria-labelledby="records-heading">
+      <div class="records-header">
+        <h2 id="records-heading" style="display: none;">Student Records</h2>
+        
+        <!-- Controls: Search, Filter, Sort -->
+        <div class="records-controls">
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input
+              type="search"
+              id="search-input"
+              class="search-input"
+              placeholder="Search student name..."
+              aria-label="Search students by name"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="filter-row">
+            <select id="filter-class" class="select-control" aria-label="Filter by class">
+              <option value="ALL">All Classes</option>
+              <!-- Filled via JS from storage CLASS_OPTIONS -->
+            </select>
+
+            <select id="filter-severity" class="select-control" aria-label="Filter by severity">
+              <option value="ALL">All Severities</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Extreme">Extreme</option>
+              <option value="Ultra">Ultra</option>
+            </select>
+          </div>
+
+          <div class="sort-row">
+            <select id="sort-by" class="select-control" aria-label="Sort students by">
+              <option value="severity">Highest severity score</option>
+              <option value="complaints">Most complaints</option>
+              <option value="latest">Latest complaint</option>
+              <option value="name">Name A-Z</option>
+              <option value="class">Class</option>
+            </select>
+
+            <button id="sort-direction-btn" class="sort-direction-btn" title="Toggle Ascending / Descending" aria-label="Toggle sort direction">
+              <svg id="sort-icon-desc" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <polyline points="19 12 12 19 5 12"/>
+              </svg>
+              <svg id="sort-icon-asc" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                <line x1="12" y1="19" x2="12" y2="5"/>
+                <polyline points="5 12 12 5 19 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Summary Counter -->
+      <div class="results-summary">
+        <span id="record-count-text">Showing 0 students</span>
+        <span id="active-filters-hint" style="display: none; font-size: 0.75rem; color: var(--primary);">Filters active</span>
+      </div>
+
+      <!-- Student Cards Grid -->
+      <div id="students-grid" class="students-grid" role="region" aria-label="Student records list">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="records-empty" class="empty-state" style="display: none;">
+        <div class="empty-state-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <h3>No student records found</h3>
+        <p id="records-empty-msg">No complaints match your current search or filter criteria.</p>
+        <button class="btn btn-primary" id="btn-empty-add">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add First Complaint
+        </button>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         SCREEN 2: Add Complaint Form
+         ====================================================================== -->
+    <section id="screen-add" class="screen" aria-labelledby="add-complaint-heading">
+      <div class="form-card">
+        <div class="form-header">
+          <h2 id="add-complaint-heading">Add New Complaint</h2>
+          <p>Record an incident or concern. Date and time are automatically captured from the device.</p>
+        </div>
+
+        <!-- Success Message Banner -->
+        <div id="form-success-banner" class="form-success-banner hidden" role="alert">
+          <span class="banner-icon" aria-hidden="true">✓</span>
+          <div class="banner-text">
+            <strong>Complaint Logged Successfully!</strong>
+            <p id="success-banner-details">Recorded on Nov 8, 2026 at 08:30 PM</p>
+          </div>
+        </div>
+
+        <!-- Form fields strictly in specified order:
+             a) Student Name
+             b) Class
+             c) Complaint
+             d) Severity buttons (Low, Med, High, Ext, Ultra)
+             e) Submit button
+        -->
+        <form id="complaint-form" class="complaint-form" novalidate>
+          
+          <!-- a) Student Name with Autocomplete -->
+          <div class="form-group">
+            <label for="input-student-name" class="form-label">
+              Student Name <span class="required-asterisk" aria-hidden="true">*</span>
+            </label>
+            <div class="autocomplete-container">
+              <input
+                type="text"
+                id="input-student-name"
+                class="input-control"
+                placeholder="e.g. Zainab Ahmed"
+                autocomplete="off"
+                required
+              />
+              <div id="autocomplete-list" class="autocomplete-dropdown" role="listbox">
+                <!-- Filled dynamically with "Name (Class)" -->
+              </div>
+            </div>
+            <div id="val-student-name" class="field-validation-msg">Please enter the student's name.</div>
+          </div>
+
+          <!-- b) Class -->
+          <div class="form-group">
+            <label for="select-class" class="form-label">
+              Class <span class="required-asterisk" aria-hidden="true">*</span>
+            </label>
+            <select id="select-class" class="select-control" required>
+              <option value="">-- Select Class --</option>
+              <!-- Filled via JS from storage CLASS_OPTIONS (Class 1 to Class 12) -->
+            </select>
+            <div id="val-class" class="field-validation-msg">Please select a class.</div>
+          </div>
+
+          <!-- c) Complaint textarea (Urdu & English support, dir="auto") -->
+          <div class="form-group">
+            <label for="textarea-complaint" class="form-label">
+              Complaint Details <span class="required-asterisk" aria-hidden="true">*</span>
+            </label>
+            <textarea
+              id="textarea-complaint"
+              class="textarea-control"
+              dir="auto"
+              rows="4"
+              placeholder="Describe the complaint in English, Roman Urdu, or اردو..."
+              required
+            ></textarea>
+            <div class="textarea-hint">
+              <span>Supports Urdu, Roman Urdu & English</span>
+              <span id="char-counter">0 chars</span>
+            </div>
+            <div id="val-complaint" class="field-validation-msg">Please enter the complaint details.</div>
+          </div>
+
+          <!-- d) Severity Radio-Style Buttons -->
+          <div class="form-group severity-group">
+            <label class="form-label">
+              Severity Level <span class="required-asterisk" aria-hidden="true">*</span>
+            </label>
+            <div class="severity-buttons-row" role="radiogroup" aria-label="Severity level selection">
+              <button
+                type="button"
+                class="sev-btn sev-btn-low"
+                data-severity="Low"
+                role="radio"
+                aria-checked="false"
+              >
+                <span>Low</span>
+                <small style="font-size: 0.6875rem; opacity: 0.85;">(1 pt)</small>
+              </button>
+
+              <button
+                type="button"
+                class="sev-btn sev-btn-medium"
+                data-severity="Medium"
+                role="radio"
+                aria-checked="false"
+              >
+                <span>Medium</span>
+                <small style="font-size: 0.6875rem; opacity: 0.85;">(2 pts)</small>
+              </button>
+
+              <button
+                type="button"
+                class="sev-btn sev-btn-high"
+                data-severity="High"
+                role="radio"
+                aria-checked="false"
+              >
+                <span>High</span>
+                <small style="font-size: 0.6875rem; opacity: 0.85;">(3 pts)</small>
+              </button>
+
+              <button
+                type="button"
+                class="sev-btn sev-btn-extreme"
+                data-severity="Extreme"
+                role="radio"
+                aria-checked="false"
+              >
+                <span>Extreme</span>
+                <small style="font-size: 0.6875rem; opacity: 0.85;">(4 pts)</small>
+              </button>
+
+              <button
+                type="button"
+                class="sev-btn sev-btn-ultra"
+                data-severity="Ultra"
+                role="radio"
+                aria-checked="false"
+              >
+                <span>Ultra</span>
+                <small style="font-size: 0.6875rem; opacity: 0.85;">(5 pts)</small>
+              </button>
+            </div>
+            <input type="hidden" id="input-severity-value" value="" />
+            <div id="val-severity" class="field-validation-msg">Please select a severity level.</div>
+          </div>
+
+          <!-- e) Submit Button -->
+          <button type="submit" id="btn-submit-complaint" class="btn btn-primary submit-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Save Complaint
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         SCREEN 3: Master Sheet Table
+         ====================================================================== -->
+    <section id="screen-master" class="screen" aria-labelledby="master-heading">
+      <div class="master-header">
+        <div>
+          <h2 id="master-heading" style="font-size: 1.25rem; font-weight: 700;">Master Complaints Sheet</h2>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 4px;">
+            Comprehensive register with sticky headers, severity tagging, and student grouping.
+          </p>
+        </div>
+
+        <!-- Master Sheet Aggregates -->
+        <div class="master-stats-cards">
+          <div class="stat-card">
+            <span id="stat-total-students" class="stat-val">0</span>
+            <span class="stat-lbl">Total Students</span>
+          </div>
+          <div class="stat-card">
+            <span id="stat-total-complaints" class="stat-val">0</span>
+            <span class="stat-lbl">Total Complaints</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table Wrapper with Horizontal Touch Scroll & Sticky Components -->
+      <div class="table-wrapper">
+        <div class="table-scroll-container">
+          <table class="sheet-table" id="master-table">
+            <thead>
+              <tr>
+                <th scope="col" style="width: 48px;">#</th>
+                <th scope="col">Student Name</th>
+                <th scope="col">Class</th>
+                <th scope="col">Complaint</th>
+                <th scope="col">Severity</th>
+                <th scope="col">Date</th>
+                <th scope="col">Time</th>
+              </tr>
+            </thead>
+            <tbody id="master-table-body">
+              <!-- Rendered dynamically by app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Master Empty State -->
+      <div id="master-empty" class="empty-state" style="display: none;">
+        <div class="empty-state-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="9" y1="21" x2="9" y2="9"/>
+          </svg>
+        </div>
+        <h3>No complaints in the register</h3>
+        <p>Start recording student complaints to view them in the master spreadsheet.</p>
+        <button class="btn btn-primary" id="btn-master-empty-add">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add First Complaint
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================================
+       Student History Detail Modal / Bottom Drawer
+       ====================================================================== -->
+  <div id="student-detail-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-student-name">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <div>
+          <h3 id="modal-student-name">Student Name</h3>
+          <p id="modal-student-meta">Class 9 • 3 complaints • Score 7</p>
+        </div>
+        <button id="modal-close-btn" class="modal-close-btn" aria-label="Close details">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Action to add complaint with pre-filled name & class -->
+        <div class="detail-actions-bar">
+          <button id="btn-detail-add-complaint" class="btn btn-primary btn-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add complaint for this student
+          </button>
+        </div>
+
+        <!-- Green-to-red severity meter inside detail view -->
+        <div id="modal-meter-section" class="meter-section" style="background: var(--bg-subtle); padding: 12px; border-radius: var(--radius-md);">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- History cards list -->
+        <h4 style="font-size: 0.9375rem; font-weight: 700; color: var(--text-main); margin-top: 4px;">
+          Complaint History (Newest First)
+        </h4>
+        <div id="modal-history-list" class="history-list">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       Confirmation Dialog Modal
+       ====================================================================== -->
+  <div id="confirm-modal" class="confirm-dialog-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+    <div class="confirm-card">
+      <h4 id="confirm-title">Delete Complaint</h4>
+      <p id="confirm-msg">
+        Are you sure you want to delete this complaint? This action cannot be undone. If this is the student's last complaint, their student record will also be removed.
+      </p>
+      <div class="confirm-actions">
+        <button id="btn-confirm-cancel" class="btn btn-outline">Cancel</button>
+        <button id="btn-confirm-proceed" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       Mobile Floating Action Button (+)
+       ====================================================================== -->
+  <button id="mobile-fab" class="mobile-fab" aria-label="Add new complaint" title="Quick Add Complaint">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
+
+  <!-- ======================================================================
+       Mobile Bottom Tab Navigation
+       ====================================================================== -->
+  <nav class="bottom-nav" aria-label="Mobile Navigation">
+    <button class="tab-btn active" data-screen="records" id="tab-nav-records">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2"/>
+        <path d="M3 9h18"/>
+        <path d="M9 21V9"/>
+      </svg>
+      <span>Records</span>
+    </button>
+    <button class="tab-btn" data-screen="add" id="tab-nav-add">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      <span>Add Complaint</span>
+    </button>
+    <button class="tab-btn" data-screen="master" id="tab-nav-master">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+        <line x1="3" y1="9" x2="21" y2="9"/>
+        <line x1="3" y1="15" x2="21" y2="15"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+        <line x1="15" y1="3" x2="15" y2="21"/>
+      </svg>
+      <span>Master Sheet</span>
+    </button>
+  </nav>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Scripts -->
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
+  
+  <!-- Service Worker Registration for PWA Offline Support -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then((reg) => {
+            console.log('ServiceWorker registered with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('ServiceWorker registration skipped or failed:', err);
+          });
+      });
+    }
+  </script>
+</body>
+</html>

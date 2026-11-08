@@ -1,0 +1,4 @@
+# Local test artifacts and screenshots
+test_screenshots/
+.system_generated/
+*.log
