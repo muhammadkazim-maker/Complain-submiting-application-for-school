@@ -8,7 +8,7 @@
 
   // State Management
   const state = {
-    currentScreen: 'records',
+    currentScreen: 'home',
     searchQuery: '',
     filterClass: 'ALL',
     filterSeverity: 'ALL',
@@ -21,11 +21,19 @@
 
   // DOM Elements Cache
   const elements = {
-    // Nav
+    // Nav & Brand
+    brandHomeLink: document.getElementById('brand-home-link'),
     screens: document.querySelectorAll('.screen'),
     deskNavLinks: document.querySelectorAll('.desktop-nav .nav-link'),
     tabNavBtns: document.querySelectorAll('.bottom-nav .tab-btn'),
     mobileFab: document.getElementById('mobile-fab'),
+
+    // Home Screen
+    homeStatStudents: document.getElementById('home-stat-students'),
+    homeStatComplaints: document.getElementById('home-stat-complaints'),
+    homeStatCritical: document.getElementById('home-stat-critical'),
+    homeRecordsTag: document.getElementById('home-records-tag'),
+    homeMasterTag: document.getElementById('home-master-tag'),
 
     // Records Screen
     searchInput: document.getElementById('search-input'),
@@ -178,6 +186,42 @@
   }
 
   /* ==========================================================================
+     Screen 0: Home Dashboard Stats & Updates
+     ========================================================================== */
+  async function updateHomeStats() {
+    try {
+      const students = await window.AppStorage.getStudentsWithStats();
+      const complaints = await window.AppStorage.getComplaints();
+
+      if (elements.homeStatStudents) {
+        elements.homeStatStudents.textContent = students.length;
+      }
+      if (elements.homeStatComplaints) {
+        elements.homeStatComplaints.textContent = complaints.length;
+      }
+
+      // Count critical, warning, or watch students
+      const criticalWatchCount = students.filter(
+        (s) => s.statusLabel === 'Critical' || s.statusLabel === 'Warning' || s.statusLabel === 'Watch'
+      ).length;
+
+      if (elements.homeStatCritical) {
+        elements.homeStatCritical.textContent = criticalWatchCount;
+      }
+
+      if (elements.homeRecordsTag) {
+        elements.homeRecordsTag.textContent = `${students.length} ${students.length === 1 ? 'Profile' : 'Profiles'}`;
+      }
+
+      if (elements.homeMasterTag) {
+        elements.homeMasterTag.textContent = `${complaints.length} ${complaints.length === 1 ? 'Incident' : 'Incidents'}`;
+      }
+    } catch (e) {
+      console.warn('Error updating home stats:', e);
+    }
+  }
+
+  /* ==========================================================================
      Navigation Controller
      ========================================================================== */
   function switchScreen(screenName) {
@@ -202,7 +246,7 @@
       btn.classList.toggle('active', btn.dataset.screen === screenName);
     });
 
-    // FAB visibility
+    // FAB visibility: show on home, records, master; hide on add
     if (elements.mobileFab) {
       elements.mobileFab.style.display = screenName === 'add' ? 'none' : 'flex';
     }
@@ -211,7 +255,9 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Refresh contents
-    if (screenName === 'records') {
+    if (screenName === 'home') {
+      updateHomeStats();
+    } else if (screenName === 'records') {
       renderStudentRecords();
     } else if (screenName === 'master') {
       renderMasterSheet();
@@ -838,6 +884,38 @@
      Setup Event Listeners
      ========================================================================== */
   function bindEvents() {
+    // Brand Link to Home
+    if (elements.brandHomeLink) {
+      const goHome = () => switchScreen('home');
+      elements.brandHomeLink.addEventListener('click', goHome);
+      elements.brandHomeLink.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          goHome();
+        }
+      });
+    }
+
+    // Curved Action Cards on Home Screen
+    document.querySelectorAll('.curved-action-card').forEach((card) => {
+      const openTarget = () => {
+        const target = card.dataset.target;
+        if (target) switchScreen(target);
+      };
+      card.addEventListener('click', openTarget);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openTarget();
+        }
+      });
+    });
+
+    // Breadcrumb Back to Home buttons
+    document.querySelectorAll('.btn-back-home').forEach((btn) => {
+      btn.addEventListener('click', () => switchScreen('home'));
+    });
+
     // Nav Tab Switching (Desktop)
     elements.deskNavLinks.forEach((link) => {
       link.addEventListener('click', () => switchScreen(link.dataset.screen));
@@ -958,9 +1036,13 @@
     // Populate initial demo records if storage is currently empty
     await window.AppStorage.populateSampleIfEmpty();
 
-    // Initial render
+    // Initial render for all screens
+    await updateHomeStats();
     await renderStudentRecords();
     await renderMasterSheet();
+
+    // Ensure landing screen is home
+    switchScreen('home');
   }
 
   // Run on DOM ready

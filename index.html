@@ -20,7 +20,7 @@
   <!-- Header / Desktop Bar -->
   <header class="app-header">
     <div class="header-container">
-      <div class="brand">
+      <div class="brand" id="brand-home-link" role="button" tabindex="0" title="Return to Home Dashboard" style="cursor: pointer;">
         <div class="brand-icon" aria-hidden="true">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -36,7 +36,14 @@
 
       <!-- Desktop Navigation Links -->
       <nav class="desktop-nav" aria-label="Desktop Navigation">
-        <button class="nav-link active" data-screen="records" id="desk-nav-records">
+        <button class="nav-link active" data-screen="home" id="desk-nav-home">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Home
+        </button>
+        <button class="nav-link" data-screen="records" id="desk-nav-records">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect width="18" height="18" x="3" y="3" rx="2"/>
             <path d="M3 9h18"/>
@@ -97,12 +104,136 @@
 
   <!-- Main Body Content -->
   <main class="main-content">
-    
+
     <!-- ======================================================================
-         SCREEN 1: Student Records (Default Screen)
+         SCREEN 0: Home Dashboard (New Default Landing Screen)
          ====================================================================== -->
-    <section id="screen-records" class="screen active" aria-labelledby="records-heading">
+    <section id="screen-home" class="screen active" aria-labelledby="home-hero-heading">
+      
+      <!-- Hero Header -->
+      <div class="home-hero">
+        <div class="home-hero-badge">
+          <span class="pulse-indicator" aria-hidden="true"></span>
+          <span>Hadi Education System • Official Portal</span>
+        </div>
+        <h2 id="home-hero-heading" class="home-hero-title">Student Complaint &amp; Discipline Portal</h2>
+        <p class="home-hero-subtitle">
+          Real-time incident monitoring, multi-tier severity analytics, and automated student discipline record management. Choose an option below to proceed.
+        </p>
+      </div>
+
+      <!-- Live Quick Overview Ribbon -->
+      <div class="home-stats-ribbon">
+        <div class="home-stat-chip">
+          <span class="home-stat-num" id="home-stat-students">0</span>
+          <span class="home-stat-lbl">Registered Students</span>
+        </div>
+        <div class="home-stat-chip">
+          <span class="home-stat-num" id="home-stat-complaints">0</span>
+          <span class="home-stat-lbl">Total Complaints</span>
+        </div>
+        <div class="home-stat-chip">
+          <span class="home-stat-num" id="home-stat-critical">0</span>
+          <span class="home-stat-lbl">Active Watch / Critical</span>
+        </div>
+      </div>
+
+      <!-- The 3 Curved Boxes / Action Tiles -->
+      <div class="home-grid-boxes" role="navigation" aria-label="Main system options">
+        
+        <!-- Option 1: Student Records -->
+        <div class="curved-action-card" data-target="records" tabindex="0" role="button" aria-label="Open Student Records">
+          <div class="card-accent-strip accent-blue"></div>
+          <div class="curved-card-header">
+            <div class="curved-card-icon icon-blue">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2"/>
+                <path d="M3 9h18"/>
+                <path d="M9 21V9"/>
+              </svg>
+            </div>
+            <span class="card-tag tag-blue" id="home-records-tag">View Records</span>
+          </div>
+          <div class="curved-card-body">
+            <h3 class="curved-card-title">Student Records</h3>
+            <p class="curved-card-desc">
+              Browse individual student profiles, monitor real-time Green-to-Red severity meters, and examine full complaint history.
+            </p>
+          </div>
+          <div class="curved-card-footer">
+            <span class="card-action-text text-blue">Explore Profiles</span>
+            <span class="card-arrow-circle arrow-blue">→</span>
+          </div>
+        </div>
+
+        <!-- Option 2: Add Complaint -->
+        <div class="curved-action-card card-featured" data-target="add" tabindex="0" role="button" aria-label="Open Add Complaint">
+          <div class="card-accent-strip accent-emerald"></div>
+          <div class="curved-card-header">
+            <div class="curved-card-icon icon-emerald">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="16"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+            </div>
+            <span class="card-tag tag-emerald">Quick Log</span>
+          </div>
+          <div class="curved-card-body">
+            <h3 class="curved-card-title">Add Complaint</h3>
+            <p class="curved-card-desc">
+              Log a new incident with student autocomplete, 5-level radio severity scoring, Urdu/English bilingual input, and automatic timestamps.
+            </p>
+          </div>
+          <div class="curved-card-footer">
+            <span class="card-action-text text-emerald">Log New Complaint</span>
+            <span class="card-arrow-circle arrow-emerald">+</span>
+          </div>
+        </div>
+
+        <!-- Option 3: Master Sheet -->
+        <div class="curved-action-card" data-target="master" tabindex="0" role="button" aria-label="Open Master Sheet">
+          <div class="card-accent-strip accent-purple"></div>
+          <div class="curved-card-header">
+            <div class="curved-card-icon icon-purple">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="3" y1="15" x2="21" y2="15"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+                <line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+            </div>
+            <span class="card-tag tag-purple" id="home-master-tag">Spreadsheet</span>
+          </div>
+          <div class="curved-card-body">
+            <h3 class="curved-card-title">Master Sheet</h3>
+            <p class="curved-card-desc">
+              Comprehensive institutional spreadsheet with sticky headers, grouped student rows, CSV download, and JSON backup restore.
+            </p>
+          </div>
+          <div class="curved-card-footer">
+            <span class="card-action-text text-purple">Open Spreadsheet</span>
+            <span class="card-arrow-circle arrow-purple">→</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         SCREEN 1: Student Records
+         ====================================================================== -->
+    <section id="screen-records" class="screen" aria-labelledby="records-heading">
       <div class="records-header">
+        <div class="screen-breadcrumb">
+          <button class="btn-back-home" aria-label="Back to Dashboard">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
         <h2 id="records-heading" style="display: none;">Student Records</h2>
         
         <!-- Controls: Search, Filter, Sort -->
@@ -199,6 +330,15 @@
          SCREEN 2: Add Complaint Form
          ====================================================================== -->
     <section id="screen-add" class="screen" aria-labelledby="add-complaint-heading">
+      <div class="screen-breadcrumb">
+        <button class="btn-back-home" aria-label="Back to Dashboard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          <span>Back to Dashboard</span>
+        </button>
+      </div>
+
       <div class="form-card">
         <div class="form-header">
           <h2 id="add-complaint-heading">Add New Complaint</h2>
@@ -358,6 +498,15 @@
          SCREEN 3: Master Sheet Table
          ====================================================================== -->
     <section id="screen-master" class="screen" aria-labelledby="master-heading">
+      <div class="screen-breadcrumb">
+        <button class="btn-back-home" aria-label="Back to Dashboard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          <span>Back to Dashboard</span>
+        </button>
+      </div>
+
       <div class="master-header">
         <div>
           <h2 id="master-heading" style="font-size: 1.25rem; font-weight: 700;">Master Complaints Sheet</h2>
@@ -495,7 +644,14 @@
        Mobile Bottom Tab Navigation
        ====================================================================== -->
   <nav class="bottom-nav" aria-label="Mobile Navigation">
-    <button class="tab-btn active" data-screen="records" id="tab-nav-records">
+    <button class="tab-btn active" data-screen="home" id="tab-nav-home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      <span>Home</span>
+    </button>
+    <button class="tab-btn" data-screen="records" id="tab-nav-records">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect width="18" height="18" x="3" y="3" rx="2"/>
         <path d="M3 9h18"/>
