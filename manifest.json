@@ -5,8 +5,8 @@
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "background_color": "#F4F8FA",
+  "theme_color": "#001B4A",
   "categories": ["education", "productivity", "utilities"],
   "icons": [
     {

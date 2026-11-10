@@ -165,7 +165,7 @@
     document.getElementById('home-stat-tests').textContent = tests.length;
 
     document.getElementById('home-violations-tag').textContent = `${complaints.length} Logged`;
-    document.getElementById('home-homework-tag').textContent = `${hws.length} Assigned • ${pending.length} Pending`;
+    document.getElementById('home-homework-tag').textContent = `${hws.length} HW • ${pending.length} Pending`;
     document.getElementById('home-tests-tag').textContent = `${tests.length} ${tests.length === 1 ? 'Test' : 'Tests'}`;
   }
 

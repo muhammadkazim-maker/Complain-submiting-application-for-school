@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#1e40af" />
+  <meta name="theme-color" content="#001B4A" />
   <meta name="description" content="Hadi Education System Balkassar — Violation Record, Homework & Pending Tasks, Monthly Tests, and Grand Student Report Portal." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Hadi Portal" />
 
   <title>Hadi Education System | Student Management Portal</title>
@@ -14,6 +14,9 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -116,46 +119,51 @@
          SCREEN 0: HOME PAGE (4 Main Curved Boxes)
          ==================================================================== -->
     <section id="screen-home" class="screen active" aria-labelledby="home-hero-heading">
-      <div class="home-hero">
-        <div class="home-hero-badge">
-          <span class="pulse-indicator" aria-hidden="true"></span>
-          <span>Hadi Education System Balkassar • 134 Active Students</span>
+      <div class="home-hero-banner">
+        <div class="hero-orb hero-orb-1" aria-hidden="true"></div>
+        <div class="hero-orb hero-orb-2" aria-hidden="true"></div>
+        <div class="home-hero">
+          <div class="home-hero-badge">
+            <span class="pulse-indicator" aria-hidden="true"></span>
+            <span>Hadi Education System Balkassar &bull; 134 Active Students</span>
+          </div>
+          <h2 id="home-hero-heading" class="home-hero-title">Academic &amp; Discipline Control Center</h2>
+          <p class="home-hero-subtitle">
+            Track daily homework &amp; unclear concepts, manage violations, enter monthly test scores, and view unified grand student reports.
+          </p>
         </div>
-        <h2 id="home-hero-heading" class="home-hero-title">Academic &amp; Discipline Control Center</h2>
-        <p class="home-hero-subtitle">
-          Manage student violations, assign and grade daily homework, record monthly test marks, and view complete grand student reports.
-        </p>
-      </div>
 
-      <!-- Home Quick Overview Counters -->
-      <div class="home-stats-ribbon">
-        <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-students">134</span>
-          <span class="home-stat-lbl">Students (6th–12th)</span>
-        </div>
-        <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-violations">0</span>
-          <span class="home-stat-lbl">Violations</span>
-        </div>
-        <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-pending">0</span>
-          <span class="home-stat-lbl">Pending Concepts</span>
-        </div>
-        <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-tests">0</span>
-          <span class="home-stat-lbl">Monthly Tests</span>
+        <!-- Home Quick Overview Counters -->
+        <div class="home-stats-ribbon">
+          <div class="home-stat-chip">
+            <span class="home-stat-num" id="home-stat-students">134</span>
+            <span class="home-stat-lbl">Students (6th–12th)</span>
+          </div>
+          <div class="home-stat-chip">
+            <span class="home-stat-num" id="home-stat-violations">0</span>
+            <span class="home-stat-lbl">Violations</span>
+          </div>
+          <div class="home-stat-chip">
+            <span class="home-stat-num" id="home-stat-pending">0</span>
+            <span class="home-stat-lbl">Pending Concepts</span>
+          </div>
+          <div class="home-stat-chip">
+            <span class="home-stat-num" id="home-stat-tests">0</span>
+            <span class="home-stat-lbl">Monthly Tests</span>
+          </div>
         </div>
       </div>
 
       <!-- 4 Main Curved Boxes on Home Page -->
       <div class="home-portal-grid" role="navigation" aria-label="Main Portal Modules">
 
-        <!-- BOX 1: Violation Record -->
-        <div class="curved-action-card" data-target="violations" tabindex="0" role="button" aria-label="Open Violation Record">
+        <!-- BOX 1: Violation Record (Palette 20: Terracotta / Sunset / Amber) -->
+        <div class="curved-action-card card-palette-violations" data-target="violations" tabindex="0" role="button" aria-label="Open Violation Record">
+          <div class="card-orb orb-violations" aria-hidden="true"></div>
           <div class="card-accent-strip accent-red"></div>
           <div class="curved-card-header">
             <div class="curved-card-icon icon-red">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 <line x1="12" y1="8" x2="12" y2="12"/>
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -175,12 +183,13 @@
           </div>
         </div>
 
-        <!-- BOX 2: Homework -->
-        <div class="curved-action-card" data-target="homework" tabindex="0" role="button" aria-label="Open Homework">
+        <!-- BOX 2: Homework (Palette 16: Deep Teal / Turquoise / Soft Aqua) -->
+        <div class="curved-action-card card-palette-homework" data-target="homework" tabindex="0" role="button" aria-label="Open Homework">
+          <div class="card-orb orb-homework" aria-hidden="true"></div>
           <div class="card-accent-strip accent-blue"></div>
           <div class="curved-card-header">
             <div class="curved-card-icon icon-blue">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
                 <path d="M8 7h6"/>
                 <path d="M8 11h8"/>
@@ -200,12 +209,13 @@
           </div>
         </div>
 
-        <!-- BOX 3: Monthly Test -->
-        <div class="curved-action-card" data-target="tests" tabindex="0" role="button" aria-label="Open Monthly Test">
+        <!-- BOX 3: Monthly Test (Palette 19: Petrol Teal / Cyan / Olive) -->
+        <div class="curved-action-card card-palette-tests" data-target="tests" tabindex="0" role="button" aria-label="Open Monthly Test">
+          <div class="card-orb orb-tests" aria-hidden="true"></div>
           <div class="card-accent-strip accent-emerald"></div>
           <div class="curved-card-header">
             <div class="curved-card-icon icon-emerald">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
                 <path d="m9 15 2 2 4-4"/>
@@ -225,14 +235,14 @@
           </div>
         </div>
 
-        <!-- BOX 4: BIG BOX FOR GRAND REPORT -->
+        <!-- BOX 4: BIG BOX FOR GRAND REPORT (Palette 15 + 16: Deep Navy / Ocean / Lavender) -->
         <div class="curved-action-card grand-report-hero-card" data-target="grand-report" tabindex="0" role="button" aria-label="Open Grand Report">
-          <div class="card-accent-strip accent-purple"></div>
+          <div class="card-orb orb-grand" aria-hidden="true"></div>
           <div class="grand-card-inner">
             <div class="grand-card-left">
               <div class="grand-card-top-row">
                 <div class="curved-card-icon icon-purple">
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 3v18h18"/>
                     <path d="m19 9-5 5-4-4-3 3"/>
                   </svg>
