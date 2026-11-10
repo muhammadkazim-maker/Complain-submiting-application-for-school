@@ -3,264 +3,415 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#2563eb" />
-  <meta name="description" content="Student Complaint Tracker - Progressive Web App for recording and monitoring student complaints with severity scoring and green-to-red meter." />
+  <meta name="theme-color" content="#1e40af" />
+  <meta name="description" content="Hadi Education System Balkassar — Violation Record, Homework & Pending Tasks, Monthly Tests, and Grand Student Report Portal." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Complaint Tracker" />
-  
-  <title>Student Complaint Tracker | Hadi Education System</title>
-  
+  <meta name="apple-mobile-web-app-title" content="Hadi Portal" />
+
+  <title>Hadi Education System | Student Management Portal</title>
+
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Header / Desktop Bar -->
-  <header class="app-header">
+  <!-- ======================================================================
+       App Header (Hidden on Print)
+       ====================================================================== -->
+  <header class="app-header no-print">
     <div class="header-container">
-      <div class="brand" id="brand-home-link" role="button" tabindex="0" title="Return to Home Dashboard" style="cursor: pointer;">
+      <div class="brand" id="brand-home-link" role="button" tabindex="0" title="Return to Home Dashboard">
         <div class="brand-icon" aria-hidden="true">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <path d="M12 8v4"/>
-            <path d="M12 16h.01"/>
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
           </svg>
         </div>
         <div class="brand-info">
-          <h1>Student Complaint Tracker</h1>
-          <p>Hadi Education System</p>
+          <h1>Hadi Education System</h1>
+          <p>Balkassar • Student Portal</p>
         </div>
       </div>
 
-      <!-- Desktop Navigation Links -->
+      <!-- Desktop Top Navigation -->
       <nav class="desktop-nav" aria-label="Desktop Navigation">
         <button class="nav-link active" data-screen="home" id="desk-nav-home">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
             <polyline points="9 22 9 12 15 12 15 22"/>
           </svg>
           Home
         </button>
-        <button class="nav-link" data-screen="records" id="desk-nav-records">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="18" height="18" x="3" y="3" rx="2"/>
-            <path d="M3 9h18"/>
-            <path d="M9 21V9"/>
+        <button class="nav-link" data-screen="violations" id="desk-nav-violations">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          Student Records
+          Violations
         </button>
-        <button class="nav-link" data-screen="add" id="desk-nav-add">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="16"/>
-            <line x1="8" y1="12" x2="16" y2="12"/>
+        <button class="nav-link" data-screen="homework" id="desk-nav-homework">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
           </svg>
-          Add Complaint
+          Homework
         </button>
-        <button class="nav-link" data-screen="master" id="desk-nav-master">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-            <line x1="3" y1="9" x2="21" y2="9"/>
-            <line x1="3" y1="15" x2="21" y2="15"/>
-            <line x1="9" y1="3" x2="9" y2="21"/>
-            <line x1="15" y1="3" x2="15" y2="21"/>
+        <button class="nav-link" data-screen="tests" id="desk-nav-tests">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
           </svg>
-          Master Sheet
+          Monthly Tests
+        </button>
+        <button class="nav-link" data-screen="grand-report" id="desk-nav-grand-report">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18"/>
+            <path d="m19 9-5 5-4-4-3 3"/>
+          </svg>
+          Grand Report
         </button>
       </nav>
 
-      <!-- Quick Action Buttons -->
+      <!-- Global Backup / Export Actions -->
       <div class="header-actions">
-        <button class="btn btn-outline btn-sm" id="btn-export-csv" title="Export Complaints to CSV">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <button class="btn btn-outline btn-sm" id="btn-export-csv" title="Export Violations to CSV">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Export CSV
+          <span class="hide-xs">CSV</span>
         </button>
         <button class="btn btn-outline btn-sm" id="btn-export-backup" title="Export Full JSON Backup">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="16 16 12 12 8 16"/>
             <line x1="12" y1="12" x2="12" y2="21"/>
             <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
           </svg>
-          Backup
+          <span class="hide-xs">Backup</span>
         </button>
         <button class="btn btn-outline btn-sm" id="btn-import-backup" title="Import JSON Backup">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="8 17 12 21 16 17"/>
             <line x1="12" y1="12" x2="12" y2="21"/>
             <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
           </svg>
-          Import
+          <span class="hide-xs">Import</span>
         </button>
         <input type="file" id="file-import-input" accept=".json" style="display: none;" />
       </div>
     </div>
   </header>
 
-  <!-- Main Body Content -->
+  <!-- ======================================================================
+       Main Application Body
+       ====================================================================== -->
   <main class="main-content">
 
-    <!-- ======================================================================
-         SCREEN 0: Home Dashboard (New Default Landing Screen)
-         ====================================================================== -->
+    <!-- ====================================================================
+         SCREEN 0: HOME PAGE (4 Main Curved Boxes)
+         ==================================================================== -->
     <section id="screen-home" class="screen active" aria-labelledby="home-hero-heading">
-      
-      <!-- Hero Header -->
       <div class="home-hero">
         <div class="home-hero-badge">
           <span class="pulse-indicator" aria-hidden="true"></span>
-          <span>Hadi Education System • Official Portal</span>
+          <span>Hadi Education System Balkassar • 134 Active Students</span>
         </div>
-        <h2 id="home-hero-heading" class="home-hero-title">Student Complaint &amp; Discipline Portal</h2>
+        <h2 id="home-hero-heading" class="home-hero-title">Academic &amp; Discipline Control Center</h2>
         <p class="home-hero-subtitle">
-          Real-time incident monitoring, multi-tier severity analytics, and automated student discipline record management. Choose an option below to proceed.
+          Manage student violations, assign and grade daily homework, record monthly test marks, and view complete grand student reports.
         </p>
       </div>
 
-      <!-- Live Quick Overview Ribbon -->
+      <!-- Home Quick Overview Counters -->
       <div class="home-stats-ribbon">
         <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-students">0</span>
-          <span class="home-stat-lbl">Registered Students</span>
+          <span class="home-stat-num" id="home-stat-students">134</span>
+          <span class="home-stat-lbl">Students (6th–12th)</span>
         </div>
         <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-complaints">0</span>
-          <span class="home-stat-lbl">Total Complaints</span>
+          <span class="home-stat-num" id="home-stat-violations">0</span>
+          <span class="home-stat-lbl">Violations</span>
         </div>
         <div class="home-stat-chip">
-          <span class="home-stat-num" id="home-stat-critical">0</span>
-          <span class="home-stat-lbl">Active Watch / Critical</span>
+          <span class="home-stat-num" id="home-stat-pending">0</span>
+          <span class="home-stat-lbl">Pending Concepts</span>
+        </div>
+        <div class="home-stat-chip">
+          <span class="home-stat-num" id="home-stat-tests">0</span>
+          <span class="home-stat-lbl">Monthly Tests</span>
         </div>
       </div>
 
-      <!-- The 3 Curved Boxes / Action Tiles -->
-      <div class="home-grid-boxes" role="navigation" aria-label="Main system options">
-        
-        <!-- Option 1: Student Records -->
-        <div class="curved-action-card" data-target="records" tabindex="0" role="button" aria-label="Open Student Records">
+      <!-- 4 Main Curved Boxes on Home Page -->
+      <div class="home-portal-grid" role="navigation" aria-label="Main Portal Modules">
+
+        <!-- BOX 1: Violation Record -->
+        <div class="curved-action-card" data-target="violations" tabindex="0" role="button" aria-label="Open Violation Record">
+          <div class="card-accent-strip accent-red"></div>
+          <div class="curved-card-header">
+            <div class="curved-card-icon icon-red">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <span class="card-tag tag-red" id="home-violations-tag">0 Logged</span>
+          </div>
+          <div class="curved-card-body">
+            <h3 class="curved-card-title">Violation Record</h3>
+            <p class="curved-card-desc">
+              Submit student violations with Urdu/English support &amp; 5-level severity rating, monitor green-to-red meters, and inspect master sheets.
+            </p>
+          </div>
+          <div class="curved-card-footer">
+            <span class="card-action-text text-red">Submit &amp; View Violations</span>
+            <span class="card-arrow-circle arrow-red">&rarr;</span>
+          </div>
+        </div>
+
+        <!-- BOX 2: Homework -->
+        <div class="curved-action-card" data-target="homework" tabindex="0" role="button" aria-label="Open Homework">
           <div class="card-accent-strip accent-blue"></div>
           <div class="curved-card-header">
             <div class="curved-card-icon icon-blue">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2"/>
-                <path d="M3 9h18"/>
-                <path d="M9 21V9"/>
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+                <path d="M8 7h6"/>
+                <path d="M8 11h8"/>
               </svg>
             </div>
-            <span class="card-tag tag-blue" id="home-records-tag">View Records</span>
+            <span class="card-tag tag-blue" id="home-homework-tag">Classes 6–12</span>
           </div>
           <div class="curved-card-body">
-            <h3 class="curved-card-title">Student Records</h3>
+            <h3 class="curved-card-title">Homework</h3>
             <p class="curved-card-desc">
-              Browse individual student profiles, monitor real-time Green-to-Red severity meters, and examine full complaint history.
+              Assign daily homework, mark student completion (&check;/&cross;) &amp; concept clarity, track monthly ratios, and resolve unclear pending tasks.
             </p>
           </div>
           <div class="curved-card-footer">
-            <span class="card-action-text text-blue">Explore Profiles</span>
-            <span class="card-arrow-circle arrow-blue">→</span>
+            <span class="card-action-text text-blue">Add &amp; Check Homework</span>
+            <span class="card-arrow-circle arrow-blue">&rarr;</span>
           </div>
         </div>
 
-        <!-- Option 2: Add Complaint -->
-        <div class="curved-action-card card-featured" data-target="add" tabindex="0" role="button" aria-label="Open Add Complaint">
+        <!-- BOX 3: Monthly Test -->
+        <div class="curved-action-card" data-target="tests" tabindex="0" role="button" aria-label="Open Monthly Test">
           <div class="card-accent-strip accent-emerald"></div>
           <div class="curved-card-header">
             <div class="curved-card-icon icon-emerald">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="16"/>
-                <line x1="8" y1="12" x2="16" y2="12"/>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="m9 15 2 2 4-4"/>
               </svg>
             </div>
-            <span class="card-tag tag-emerald">Quick Log</span>
+            <span class="card-tag tag-emerald" id="home-tests-tag">0 Tests</span>
           </div>
           <div class="curved-card-body">
-            <h3 class="curved-card-title">Add Complaint</h3>
+            <h3 class="curved-card-title">Monthly Test</h3>
             <p class="curved-card-desc">
-              Log a new incident with student autocomplete, 5-level radio severity scoring, Urdu/English bilingual input, and automatic timestamps.
+              Create named monthly tests, browse classes 6th to 2nd Year &amp; their subjects, and enter student test marks with instant percentages.
             </p>
           </div>
           <div class="curved-card-footer">
-            <span class="card-action-text text-emerald">Log New Complaint</span>
+            <span class="card-action-text text-emerald">Manage Tests &amp; Marks</span>
             <span class="card-arrow-circle arrow-emerald">+</span>
           </div>
         </div>
 
-        <!-- Option 3: Master Sheet -->
-        <div class="curved-action-card" data-target="master" tabindex="0" role="button" aria-label="Open Master Sheet">
+        <!-- BOX 4: BIG BOX FOR GRAND REPORT -->
+        <div class="curved-action-card grand-report-hero-card" data-target="grand-report" tabindex="0" role="button" aria-label="Open Grand Report">
           <div class="card-accent-strip accent-purple"></div>
-          <div class="curved-card-header">
-            <div class="curved-card-icon icon-purple">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                <line x1="3" y1="9" x2="21" y2="9"/>
-                <line x1="3" y1="15" x2="21" y2="15"/>
-                <line x1="9" y1="3" x2="9" y2="21"/>
-                <line x1="15" y1="3" x2="15" y2="21"/>
-              </svg>
+          <div class="grand-card-inner">
+            <div class="grand-card-left">
+              <div class="grand-card-top-row">
+                <div class="curved-card-icon icon-purple">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 3v18h18"/>
+                    <path d="m19 9-5 5-4-4-3 3"/>
+                  </svg>
+                </div>
+                <span class="card-tag tag-purple">Complete Student Dossier</span>
+              </div>
+              <h3 class="curved-card-title grand-card-title">Grand Report</h3>
+              <p class="curved-card-desc">
+                Select any class (6th to 2nd Year) and tap any student to open their complete all-in-one report: Violation History &amp; Meter, Subject-wise Homework Marking &amp; Pending Tasks, Monthly Test Scores, and Guardian WhatsApp Contact.
+              </p>
             </div>
-            <span class="card-tag tag-purple" id="home-master-tag">Spreadsheet</span>
-          </div>
-          <div class="curved-card-body">
-            <h3 class="curved-card-title">Master Sheet</h3>
-            <p class="curved-card-desc">
-              Comprehensive institutional spreadsheet with sticky headers, grouped student rows, CSV download, and JSON backup restore.
-            </p>
-          </div>
-          <div class="curved-card-footer">
-            <span class="card-action-text text-purple">Open Spreadsheet</span>
-            <span class="card-arrow-circle arrow-purple">→</span>
+            <div class="grand-card-right">
+              <span class="grand-cta-pill">
+                Open Grand Report &rarr;
+              </span>
+            </div>
           </div>
         </div>
 
       </div>
     </section>
 
-    <!-- ======================================================================
-         SCREEN 1: Student Records
-         ====================================================================== -->
-    <section id="screen-records" class="screen" aria-labelledby="records-heading">
-      <div class="records-header">
-        <div class="screen-breadcrumb">
-          <button class="btn-back-home" aria-label="Back to Dashboard">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            <span>Back to Dashboard</span>
-          </button>
+    <!-- ====================================================================
+         SCREEN 1: VIOLATION RECORD MODULE
+         ==================================================================== -->
+    <section id="screen-violations" class="screen" aria-labelledby="violations-heading">
+      <div class="screen-top-bar">
+        <button class="btn-back-home" aria-label="Back to Home">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          <span>Back to Home</span>
+        </button>
+        <h2 id="violations-heading" class="screen-title">Violation Record</h2>
+      </div>
+
+      <!-- Sub-Navigation Tabs inside Violation Record -->
+      <div class="subtabs-bar" role="tablist" aria-label="Violation sections">
+        <button class="subtab-btn active" data-vtab="form" role="tab" aria-selected="true" id="vtab-btn-form">
+          + Submit Violation
+        </button>
+        <button class="subtab-btn" data-vtab="records" role="tab" aria-selected="false" id="vtab-btn-records">
+          Violation Records (<span id="vtab-count-students">0</span>)
+        </button>
+        <button class="subtab-btn" data-vtab="master" role="tab" aria-selected="false" id="vtab-btn-master">
+          Master Sheet (<span id="vtab-count-total">0</span>)
+        </button>
+      </div>
+
+      <!-- SUB-VIEW 1A: Violation Submission Form -->
+      <div id="vview-form" class="vview active">
+        <div class="form-card">
+          <div class="form-header">
+            <h3>Submit Student Violation</h3>
+            <p>Record an incident. Date and time are automatically captured from the device.</p>
+          </div>
+
+          <div id="form-success-banner" class="form-success-banner hidden" role="alert">
+            <span class="banner-icon" aria-hidden="true">&#10003;</span>
+            <div class="banner-text">
+              <strong>Violation Logged Successfully!</strong>
+              <p id="success-banner-details"></p>
+            </div>
+          </div>
+
+          <!-- Fields in exact specified order:
+               a) Student Name (autocomplete)
+               b) Class
+               c) Violation / Complaint (Urdu & English, dir="auto")
+               d) 5 Severity Buttons
+               e) Submit button -->
+          <form id="complaint-form" class="complaint-form" novalidate>
+            <input type="hidden" id="input-student-id" value="" />
+
+            <!-- a) Student Name -->
+            <div class="form-group">
+              <label for="input-student-name" class="form-label">
+                Student Name <span class="required-asterisk">*</span>
+              </label>
+              <div class="autocomplete-container">
+                <input
+                  type="text"
+                  id="input-student-name"
+                  class="input-control"
+                  placeholder="Type student name (e.g. Abid Abdullah)..."
+                  autocomplete="off"
+                  required
+                />
+                <div id="autocomplete-list" class="autocomplete-dropdown" role="listbox"></div>
+              </div>
+              <div id="val-student-name" class="field-validation-msg">Please enter the student's name.</div>
+            </div>
+
+            <!-- b) Class -->
+            <div class="form-group">
+              <label for="select-class" class="form-label">
+                Class <span class="required-asterisk">*</span>
+              </label>
+              <select id="select-class" class="select-control" required>
+                <option value="">-- Select Class --</option>
+              </select>
+              <div id="val-class" class="field-validation-msg">Please select a class.</div>
+            </div>
+
+            <!-- c) Violation / Complaint Textarea -->
+            <div class="form-group">
+              <label for="textarea-complaint" class="form-label">
+                Violation Details <span class="required-asterisk">*</span>
+              </label>
+              <textarea
+                id="textarea-complaint"
+                class="textarea-control"
+                dir="auto"
+                rows="4"
+                placeholder="Describe the violation in English, Roman Urdu, or اردو..."
+                required
+              ></textarea>
+              <div class="textarea-hint">
+                <span>Supports Urdu, Roman Urdu &amp; English</span>
+                <span id="char-counter">0 chars</span>
+              </div>
+              <div id="val-complaint" class="field-validation-msg">Please enter violation details.</div>
+            </div>
+
+            <!-- d) 5 Severity Buttons -->
+            <div class="form-group severity-group">
+              <label class="form-label">
+                Severity Level <span class="required-asterisk">*</span>
+              </label>
+              <div class="severity-buttons-row" role="radiogroup" aria-label="Severity level selection">
+                <button type="button" class="sev-btn sev-btn-low" data-severity="Low" role="radio" aria-checked="false">
+                  <span>Low</span>
+                  <small>(1 pt)</small>
+                </button>
+                <button type="button" class="sev-btn sev-btn-medium" data-severity="Medium" role="radio" aria-checked="false">
+                  <span>Medium</span>
+                  <small>(2 pts)</small>
+                </button>
+                <button type="button" class="sev-btn sev-btn-high" data-severity="High" role="radio" aria-checked="false">
+                  <span>High</span>
+                  <small>(3 pts)</small>
+                </button>
+                <button type="button" class="sev-btn sev-btn-extreme" data-severity="Extreme" role="radio" aria-checked="false">
+                  <span>Extreme</span>
+                  <small>(4 pts)</small>
+                </button>
+                <button type="button" class="sev-btn sev-btn-ultra" data-severity="Ultra" role="radio" aria-checked="false">
+                  <span>Ultra</span>
+                  <small>(5 pts)</small>
+                </button>
+              </div>
+              <input type="hidden" id="input-severity-value" value="" />
+              <div id="val-severity" class="field-validation-msg">Please select a severity level.</div>
+            </div>
+
+            <!-- e) Submit Button -->
+            <button type="submit" id="btn-submit-complaint" class="btn btn-primary submit-btn">
+              Submit Violation
+            </button>
+          </form>
         </div>
-        <h2 id="records-heading" style="display: none;">Student Records</h2>
-        
-        <!-- Controls: Search, Filter, Sort -->
+      </div>
+
+      <!-- SUB-VIEW 1B: Student Violation Records Grid -->
+      <div id="vview-records" class="vview">
         <div class="records-controls">
           <div class="search-box">
             <span class="search-icon" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
             </span>
-            <input
-              type="search"
-              id="search-input"
-              class="search-input"
-              placeholder="Search student name..."
-              aria-label="Search students by name"
-              autocomplete="off"
-            />
+            <input type="search" id="search-input" class="search-input" placeholder="Search student name..." autocomplete="off" />
           </div>
 
           <div class="filter-row">
             <select id="filter-class" class="select-control" aria-label="Filter by class">
               <option value="ALL">All Classes</option>
-              <!-- Filled via JS from storage CLASS_OPTIONS -->
             </select>
-
             <select id="filter-severity" class="select-control" aria-label="Filter by severity">
               <option value="ALL">All Severities</option>
               <option value="Low">Low</option>
@@ -272,431 +423,389 @@
           </div>
 
           <div class="sort-row">
-            <select id="sort-by" class="select-control" aria-label="Sort students by">
+            <select id="sort-by" class="select-control" aria-label="Sort by">
               <option value="severity">Highest severity score</option>
-              <option value="complaints">Most complaints</option>
-              <option value="latest">Latest complaint</option>
+              <option value="complaints">Most violations</option>
+              <option value="latest">Latest violation</option>
               <option value="name">Name A-Z</option>
               <option value="class">Class</option>
             </select>
-
-            <button id="sort-direction-btn" class="sort-direction-btn" title="Toggle Ascending / Descending" aria-label="Toggle sort direction">
-              <svg id="sort-icon-desc" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <polyline points="19 12 12 19 5 12"/>
+            <button id="sort-direction-btn" class="sort-direction-btn" title="Toggle Ascending / Descending">
+              <svg id="sort-icon-desc" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
               </svg>
-              <svg id="sort-icon-asc" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                <line x1="12" y1="19" x2="12" y2="5"/>
-                <polyline points="5 12 12 5 19 12"/>
+              <svg id="sort-icon-asc" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
               </svg>
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- Quick Summary Counter -->
-      <div class="results-summary">
-        <span id="record-count-text">Showing 0 students</span>
-        <span id="active-filters-hint" style="display: none; font-size: 0.75rem; color: var(--primary);">Filters active</span>
-      </div>
-
-      <!-- Student Cards Grid -->
-      <div id="students-grid" class="students-grid" role="region" aria-label="Student records list">
-        <!-- Rendered dynamically by app.js -->
-      </div>
-
-      <!-- Empty State -->
-      <div id="records-empty" class="empty-state" style="display: none;">
-        <div class="empty-state-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-        </div>
-        <h3>No student records found</h3>
-        <p id="records-empty-msg">No complaints match your current search or filter criteria.</p>
-        <button class="btn btn-primary" id="btn-empty-add">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add First Complaint
-        </button>
-      </div>
-    </section>
-
-    <!-- ======================================================================
-         SCREEN 2: Add Complaint Form
-         ====================================================================== -->
-    <section id="screen-add" class="screen" aria-labelledby="add-complaint-heading">
-      <div class="screen-breadcrumb">
-        <button class="btn-back-home" aria-label="Back to Dashboard">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          <span>Back to Dashboard</span>
-        </button>
-      </div>
-
-      <div class="form-card">
-        <div class="form-header">
-          <h2 id="add-complaint-heading">Add New Complaint</h2>
-          <p>Record an incident or concern. Date and time are automatically captured from the device.</p>
+        <div class="results-summary">
+          <span id="record-count-text">Showing 0 students</span>
+          <span id="active-filters-hint" style="display: none; font-size: 0.75rem; color: var(--primary);">Filters active</span>
         </div>
 
-        <!-- Success Message Banner -->
-        <div id="form-success-banner" class="form-success-banner hidden" role="alert">
-          <span class="banner-icon" aria-hidden="true">✓</span>
-          <div class="banner-text">
-            <strong>Complaint Logged Successfully!</strong>
-            <p id="success-banner-details">Recorded on Nov 8, 2026 at 08:30 PM</p>
+        <div id="students-grid" class="students-grid"></div>
+
+        <div id="records-empty" class="empty-state" style="display: none;">
+          <div class="empty-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h3>No violation records found</h3>
+          <p id="records-empty-msg">No student violations recorded yet.</p>
+          <button class="btn btn-primary" id="btn-empty-add">+ Submit First Violation</button>
+        </div>
+      </div>
+
+      <!-- SUB-VIEW 1C: Master Sheet -->
+      <div id="vview-master" class="vview">
+        <div class="master-header">
+          <div class="master-stats-cards">
+            <div class="stat-card">
+              <span id="stat-total-students" class="stat-val">0</span>
+              <span class="stat-lbl">Students with Violations</span>
+            </div>
+            <div class="stat-card">
+              <span id="stat-total-complaints" class="stat-val">0</span>
+              <span class="stat-lbl">Total Violations</span>
+            </div>
           </div>
         </div>
 
-        <!-- Form fields strictly in specified order:
-             a) Student Name
-             b) Class
-             c) Complaint
-             d) Severity buttons (Low, Med, High, Ext, Ultra)
-             e) Submit button
-        -->
-        <form id="complaint-form" class="complaint-form" novalidate>
-          
-          <!-- a) Student Name with Autocomplete -->
-          <div class="form-group">
-            <label for="input-student-name" class="form-label">
-              Student Name <span class="required-asterisk" aria-hidden="true">*</span>
-            </label>
-            <div class="autocomplete-container">
-              <input
-                type="text"
-                id="input-student-name"
-                class="input-control"
-                placeholder="e.g. Zainab Ahmed"
-                autocomplete="off"
-                required
-              />
-              <div id="autocomplete-list" class="autocomplete-dropdown" role="listbox">
-                <!-- Filled dynamically with "Name (Class)" -->
+        <div class="table-wrapper">
+          <div class="table-scroll-container">
+            <table class="sheet-table" id="master-table">
+              <thead>
+                <tr>
+                  <th scope="col" style="width: 48px;">#</th>
+                  <th scope="col">Student Name</th>
+                  <th scope="col">Class</th>
+                  <th scope="col">Violation</th>
+                  <th scope="col">Severity</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Time</th>
+                </tr>
+              </thead>
+              <tbody id="master-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="master-empty" class="empty-state" style="display: none;">
+          <h3>No violations in register</h3>
+          <p>Submit a violation to view the master spreadsheet.</p>
+          <button class="btn btn-primary" id="btn-master-empty-add">+ Submit Violation</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         SCREEN 2: HOMEWORK MODULE
+         ==================================================================== -->
+    <section id="screen-homework" class="screen" aria-labelledby="homework-heading">
+      <div class="screen-top-bar">
+        <button class="btn-back-home" aria-label="Back to Home">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          <span>Back to Home</span>
+        </button>
+        <h2 id="homework-heading" class="screen-title">Homework &amp; Concept Tracking</h2>
+      </div>
+
+      <!-- TOP LONG RECTANGULAR DISTINCT BOX FOR ADD HOMEWORK -->
+      <div class="hw-add-banner-box" id="hw-add-banner-box">
+        <div class="hw-banner-header" id="hw-banner-toggle" role="button" tabindex="0">
+          <div class="hw-banner-left">
+            <div class="hw-banner-plus">+</div>
+            <div>
+              <h3>Add Daily Homework</h3>
+              <p>Enter teacher name, today's homework/lesson, and mark each student's completion &amp; concept clarity.</p>
+            </div>
+          </div>
+          <div class="hw-banner-right">
+            <div class="hw-auto-datetime" id="hw-live-datetime">Auto Date &bull; Time &bull; Day</div>
+            <span class="hw-toggle-pill" id="hw-toggle-pill">Open Form &#9662;</span>
+          </div>
+        </div>
+
+        <!-- Expandable Add Homework Form inside the Distinct Rectangular Box -->
+        <div class="hw-form-drawer" id="hw-form-drawer" style="display: none;">
+          <form id="hw-create-form" class="hw-form" novalidate>
+            <div class="hw-form-grid">
+              <div class="form-group">
+                <label class="form-label" for="hw-select-class">Class <span class="required-asterisk">*</span></label>
+                <select id="hw-select-class" class="select-control" required></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="hw-select-subject">Subject <span class="required-asterisk">*</span></label>
+                <select id="hw-select-subject" class="select-control" required></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="hw-input-teacher">Teacher Name <span class="required-asterisk">*</span></label>
+                <input type="text" id="hw-input-teacher" class="input-control" list="hw-teachers-datalist" placeholder="e.g. Sir Muhammad Ali" required />
+                <datalist id="hw-teachers-datalist"></datalist>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Date, Time &amp; Day (Auto-Filled)</label>
+                <div class="hw-readonly-dt" id="hw-form-readonly-dt">Loading device clock...</div>
               </div>
             </div>
-            <div id="val-student-name" class="field-validation-msg">Please enter the student's name.</div>
-          </div>
 
-          <!-- b) Class -->
-          <div class="form-group">
-            <label for="select-class" class="form-label">
-              Class <span class="required-asterisk" aria-hidden="true">*</span>
-            </label>
-            <select id="select-class" class="select-control" required>
-              <option value="">-- Select Class --</option>
-              <!-- Filled via JS from storage CLASS_OPTIONS (Class 1 to Class 12) -->
-            </select>
-            <div id="val-class" class="field-validation-msg">Please select a class.</div>
-          </div>
-
-          <!-- c) Complaint textarea (Urdu & English support, dir="auto") -->
-          <div class="form-group">
-            <label for="textarea-complaint" class="form-label">
-              Complaint Details <span class="required-asterisk" aria-hidden="true">*</span>
-            </label>
-            <textarea
-              id="textarea-complaint"
-              class="textarea-control"
-              dir="auto"
-              rows="4"
-              placeholder="Describe the complaint in English, Roman Urdu, or اردو..."
-              required
-            ></textarea>
-            <div class="textarea-hint">
-              <span>Supports Urdu, Roman Urdu & English</span>
-              <span id="char-counter">0 chars</span>
+            <div class="form-group" style="margin-top: 12px;">
+              <label class="form-label" for="hw-textarea-desc">Homework / What Was Taught Today <span class="required-asterisk">*</span></label>
+              <textarea id="hw-textarea-desc" class="textarea-control" dir="auto" rows="3" placeholder="Describe what was taught today and the assigned homework (English or اردو)..." required></textarea>
             </div>
-            <div id="val-complaint" class="field-validation-msg">Please enter the complaint details.</div>
-          </div>
 
-          <!-- d) Severity Radio-Style Buttons -->
-          <div class="form-group severity-group">
-            <label class="form-label">
-              Severity Level <span class="required-asterisk" aria-hidden="true">*</span>
-            </label>
-            <div class="severity-buttons-row" role="radiogroup" aria-label="Severity level selection">
-              <button
-                type="button"
-                class="sev-btn sev-btn-low"
-                data-severity="Low"
-                role="radio"
-                aria-checked="false"
-              >
-                <span>Low</span>
-                <small style="font-size: 0.6875rem; opacity: 0.85;">(1 pt)</small>
-              </button>
-
-              <button
-                type="button"
-                class="sev-btn sev-btn-medium"
-                data-severity="Medium"
-                role="radio"
-                aria-checked="false"
-              >
-                <span>Medium</span>
-                <small style="font-size: 0.6875rem; opacity: 0.85;">(2 pts)</small>
-              </button>
-
-              <button
-                type="button"
-                class="sev-btn sev-btn-high"
-                data-severity="High"
-                role="radio"
-                aria-checked="false"
-              >
-                <span>High</span>
-                <small style="font-size: 0.6875rem; opacity: 0.85;">(3 pts)</small>
-              </button>
-
-              <button
-                type="button"
-                class="sev-btn sev-btn-extreme"
-                data-severity="Extreme"
-                role="radio"
-                aria-checked="false"
-              >
-                <span>Extreme</span>
-                <small style="font-size: 0.6875rem; opacity: 0.85;">(4 pts)</small>
-              </button>
-
-              <button
-                type="button"
-                class="sev-btn sev-btn-ultra"
-                data-severity="Ultra"
-                role="radio"
-                aria-checked="false"
-              >
-                <span>Ultra</span>
-                <small style="font-size: 0.6875rem; opacity: 0.85;">(5 pts)</small>
+            <div class="hw-form-actions">
+              <button type="button" class="btn btn-outline" id="hw-btn-cancel-form">Close</button>
+              <button type="submit" class="btn btn-primary" id="hw-btn-load-students">
+                Load Class Students Checklist &rarr;
               </button>
             </div>
-            <input type="hidden" id="input-severity-value" value="" />
-            <div id="val-severity" class="field-validation-msg">Please select a severity level.</div>
-          </div>
+          </form>
 
-          <!-- e) Submit Button -->
-          <button type="submit" id="btn-submit-complaint" class="btn btn-primary submit-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/>
-              <polyline points="7 3 7 8 15 8"/>
-            </svg>
-            Save Complaint
-          </button>
-        </form>
+          <!-- STEP 2: Student Marking List (appears right after form is completed) -->
+          <div id="hw-marking-panel" class="hw-marking-panel" style="display: none;">
+            <div class="hw-marking-header">
+              <div>
+                <h4 id="hw-marking-title">Mark Students</h4>
+                <p id="hw-marking-subtitle"></p>
+              </div>
+              <div class="hw-quick-bulk">
+                <button type="button" class="btn btn-outline btn-sm" id="hw-mark-all-done">&#10003; All Done</button>
+                <button type="button" class="btn btn-outline btn-sm" id="hw-mark-all-clear">&#128161; All Clear</button>
+              </div>
+            </div>
+
+            <div id="hw-marking-rows" class="hw-marking-rows"></div>
+
+            <div class="hw-marking-footer">
+              <button type="button" class="btn btn-outline" id="hw-btn-back-edit">&larr; Edit Form</button>
+              <button type="button" class="btn btn-primary" id="hw-btn-save-all">
+                Save Homework &amp; Student Marks
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Homework Mode Switcher: Browse Classes vs Pending Tasks -->
+      <div class="subtabs-bar" style="margin-top: 16px;">
+        <button class="subtab-btn active" id="hw-mode-browse">
+          Browse Classes (6th–12th)
+        </button>
+        <button class="subtab-btn" id="hw-mode-pending">
+          Pending Tasks (<span id="hw-pending-badge-count">0</span>)
+        </button>
+      </div>
+
+      <!-- HOMEWORK BROWSER CONTAINER (Breadcrumb + Dynamic Grid) -->
+      <div id="hw-browse-container">
+        <div class="drill-breadcrumb" id="hw-breadcrumb"></div>
+        <div id="hw-drill-content"></div>
+      </div>
+
+      <!-- PENDING TASKS VIEW -->
+      <div id="hw-pending-container" style="display: none;">
+        <div class="records-controls" style="margin-bottom: 16px;">
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input type="search" id="pending-search-input" class="search-input" placeholder="Search student or subject..." />
+          </div>
+          <select id="pending-filter-class" class="select-control">
+            <option value="ALL">All Classes</option>
+          </select>
+          <select id="pending-filter-status" class="select-control">
+            <option value="pending">Active Pending Only</option>
+            <option value="all">Include Cleared Tasks</option>
+          </select>
+        </div>
+        <div id="pending-tasks-list" class="pending-tasks-list"></div>
       </div>
     </section>
 
-    <!-- ======================================================================
-         SCREEN 3: Master Sheet Table
-         ====================================================================== -->
-    <section id="screen-master" class="screen" aria-labelledby="master-heading">
-      <div class="screen-breadcrumb">
-        <button class="btn-back-home" aria-label="Back to Dashboard">
+    <!-- ====================================================================
+         SCREEN 3: MONTHLY TEST MODULE
+         ==================================================================== -->
+    <section id="screen-tests" class="screen" aria-labelledby="tests-heading">
+      <div class="screen-top-bar">
+        <button class="btn-back-home" aria-label="Back to Home">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          <span>Back to Dashboard</span>
+          <span>Back to Home</span>
         </button>
+        <h2 id="tests-heading" class="screen-title">Monthly Tests &amp; Marks</h2>
       </div>
 
-      <div class="master-header">
-        <div>
-          <h2 id="master-heading" style="font-size: 1.25rem; font-weight: 700;">Master Complaints Sheet</h2>
-          <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 4px;">
-            Comprehensive register with sticky headers, severity tagging, and student grouping.
-          </p>
-        </div>
-
-        <!-- Master Sheet Aggregates -->
-        <div class="master-stats-cards">
-          <div class="stat-card">
-            <span id="stat-total-students" class="stat-val">0</span>
-            <span class="stat-lbl">Total Students</span>
-          </div>
-          <div class="stat-card">
-            <span id="stat-total-complaints" class="stat-val">0</span>
-            <span class="stat-lbl">Total Complaints</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Table Wrapper with Horizontal Touch Scroll & Sticky Components -->
-      <div class="table-wrapper">
-        <div class="table-scroll-container">
-          <table class="sheet-table" id="master-table">
-            <thead>
-              <tr>
-                <th scope="col" style="width: 48px;">#</th>
-                <th scope="col">Student Name</th>
-                <th scope="col">Class</th>
-                <th scope="col">Complaint</th>
-                <th scope="col">Severity</th>
-                <th scope="col">Date</th>
-                <th scope="col">Time</th>
-              </tr>
-            </thead>
-            <tbody id="master-table-body">
-              <!-- Rendered dynamically by app.js -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Master Empty State -->
-      <div id="master-empty" class="empty-state" style="display: none;">
-        <div class="empty-state-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-            <line x1="3" y1="9" x2="21" y2="9"/>
-            <line x1="9" y1="21" x2="9" y2="9"/>
-          </svg>
-        </div>
-        <h3>No complaints in the register</h3>
-        <p>Start recording student complaints to view them in the master spreadsheet.</p>
-        <button class="btn btn-primary" id="btn-master-empty-add">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add First Complaint
+      <!-- Top Create Test Bar (+ Plus Sign & Form) -->
+      <div id="tests-create-bar" class="tests-create-bar">
+        <button type="button" class="btn-create-test-trigger" id="btn-show-create-test">
+          <span class="plus-circle">+</span>
+          <span>Create New Monthly Test Box</span>
         </button>
+
+        <form id="create-test-form" class="create-test-form" style="display: none;">
+          <input type="text" id="input-new-test-name" class="input-control" placeholder="Enter test name (e.g. November Monthly Test) and press Enter..." required />
+          <input type="number" id="input-new-test-total" class="input-control" style="max-width: 140px;" value="100" min="1" placeholder="Default Max" title="Default Total Marks" />
+          <button type="submit" class="btn btn-primary">Create Test Box</button>
+          <button type="button" class="btn btn-outline" id="btn-cancel-create-test">Cancel</button>
+        </form>
       </div>
+
+      <div class="drill-breadcrumb" id="tests-breadcrumb"></div>
+      <div id="tests-drill-content"></div>
+    </section>
+
+    <!-- ====================================================================
+         SCREEN 4: GRAND REPORT MODULE
+         ==================================================================== -->
+    <section id="screen-grand-report" class="screen" aria-labelledby="grand-heading">
+      <div class="screen-top-bar no-print">
+        <button class="btn-back-home" aria-label="Back to Home">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          <span>Back to Home</span>
+        </button>
+        <h2 id="grand-heading" class="screen-title">Grand Student Report</h2>
+      </div>
+
+      <div class="drill-breadcrumb no-print" id="grand-breadcrumb"></div>
+      <div id="grand-drill-content"></div>
     </section>
 
   </main>
 
   <!-- ======================================================================
-       Student History Detail Modal / Bottom Drawer
+       MODALS
        ====================================================================== -->
-  <div id="student-detail-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-student-name">
+
+  <!-- Student Violation History Modal -->
+  <div id="student-detail-modal" class="modal-backdrop no-print" role="dialog" aria-modal="true" aria-labelledby="modal-student-name">
     <div class="modal-sheet">
       <div class="modal-header">
         <div>
           <h3 id="modal-student-name">Student Name</h3>
-          <p id="modal-student-meta">Class 9 • 3 complaints • Score 7</p>
+          <p id="modal-student-meta"></p>
         </div>
-        <button id="modal-close-btn" class="modal-close-btn" aria-label="Close details">✕</button>
+        <button id="modal-close-btn" class="modal-close-btn" aria-label="Close details">&times;</button>
       </div>
-
       <div class="modal-body">
-        <!-- Action to add complaint with pre-filled name & class -->
         <div class="detail-actions-bar">
-          <button id="btn-detail-add-complaint" class="btn btn-primary btn-sm">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add complaint for this student
-          </button>
+          <button id="btn-detail-add-complaint" class="btn btn-primary btn-sm">+ Add violation for this student</button>
+          <button id="btn-detail-open-grand" class="btn btn-outline btn-sm">View Grand Report &rarr;</button>
         </div>
-
-        <!-- Green-to-red severity meter inside detail view -->
-        <div id="modal-meter-section" class="meter-section" style="background: var(--bg-subtle); padding: 12px; border-radius: var(--radius-md);">
-          <!-- Injected via JS -->
-        </div>
-
-        <!-- History cards list -->
-        <h4 style="font-size: 0.9375rem; font-weight: 700; color: var(--text-main); margin-top: 4px;">
-          Complaint History (Newest First)
-        </h4>
-        <div id="modal-history-list" class="history-list">
-          <!-- Rendered dynamically -->
-        </div>
+        <div id="modal-meter-section" class="meter-section" style="background: var(--bg-subtle); padding: 12px; border-radius: var(--radius-md);"></div>
+        <h4 style="font-size: 0.9375rem; font-weight: 700; margin-top: 4px;">Violation History (Newest First)</h4>
+        <div id="modal-history-list" class="history-list"></div>
       </div>
     </div>
   </div>
 
-  <!-- ======================================================================
-       Confirmation Dialog Modal
-       ====================================================================== -->
-  <div id="confirm-modal" class="confirm-dialog-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+  <!-- Student Subject Homework Report Modal (Timeframe Selectable: 1d, 7d, 1m, custom) -->
+  <div id="hw-student-report-modal" class="modal-backdrop no-print" role="dialog" aria-modal="true" aria-labelledby="hw-modal-student-name">
+    <div class="modal-sheet modal-sheet-wide">
+      <div class="modal-header">
+        <div>
+          <h3 id="hw-modal-student-name">Student Homework Report</h3>
+          <p id="hw-modal-student-meta"></p>
+        </div>
+        <button id="hw-modal-close-btn" class="modal-close-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Time Period Selector -->
+        <div class="timeframe-selector-bar">
+          <span class="timeframe-label">Report Period:</span>
+          <div class="timeframe-pills" id="hw-timeframe-pills">
+            <button type="button" class="tf-pill" data-range="1d">1 Day</button>
+            <button type="button" class="tf-pill" data-range="7d">7 Days</button>
+            <button type="button" class="tf-pill active" data-range="30d">1 Month</button>
+            <button type="button" class="tf-pill" data-range="all">All Time</button>
+            <button type="button" class="tf-pill" data-range="custom">Custom</button>
+          </div>
+          <div id="hw-custom-range-inputs" class="custom-range-inputs" style="display: none;">
+            <input type="date" id="hw-custom-start" class="input-control input-sm" />
+            <span>to</span>
+            <input type="date" id="hw-custom-end" class="input-control input-sm" />
+            <button type="button" class="btn btn-primary btn-sm" id="hw-apply-custom-range">Apply</button>
+          </div>
+        </div>
+
+        <div id="hw-modal-report-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation Dialog Modal -->
+  <div id="confirm-modal" class="confirm-dialog-backdrop no-print" role="alertdialog" aria-modal="true">
     <div class="confirm-card">
-      <h4 id="confirm-title">Delete Complaint</h4>
-      <p id="confirm-msg">
-        Are you sure you want to delete this complaint? This action cannot be undone. If this is the student's last complaint, their student record will also be removed.
-      </p>
+      <h4 id="confirm-title">Confirm Action</h4>
+      <p id="confirm-msg">Are you sure?</p>
       <div class="confirm-actions">
         <button id="btn-confirm-cancel" class="btn btn-outline">Cancel</button>
-        <button id="btn-confirm-proceed" class="btn btn-danger">Delete</button>
+        <button id="btn-confirm-proceed" class="btn btn-danger">Confirm</button>
       </div>
     </div>
   </div>
 
-  <!-- ======================================================================
-       Mobile Floating Action Button (+)
-       ====================================================================== -->
-  <button id="mobile-fab" class="mobile-fab" aria-label="Add new complaint" title="Quick Add Complaint">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19"/>
-      <line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  </button>
-
-  <!-- ======================================================================
-       Mobile Bottom Tab Navigation
-       ====================================================================== -->
-  <nav class="bottom-nav" aria-label="Mobile Navigation">
+  <!-- Mobile Bottom Navigation Bar (5 Tabs) -->
+  <nav class="bottom-nav no-print" aria-label="Mobile Navigation">
     <button class="tab-btn active" data-screen="home" id="tab-nav-home">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <polyline points="9 22 9 12 15 12 15 22"/>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
       <span>Home</span>
     </button>
-    <button class="tab-btn" data-screen="records" id="tab-nav-records">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2"/>
-        <path d="M3 9h18"/>
-        <path d="M9 21V9"/>
+    <button class="tab-btn" data-screen="violations" id="tab-nav-violations">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
-      <span>Records</span>
+      <span>Violations</span>
     </button>
-    <button class="tab-btn" data-screen="add" id="tab-nav-add">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="16"/>
-        <line x1="8" y1="12" x2="16" y2="12"/>
+    <button class="tab-btn" data-screen="homework" id="tab-nav-homework">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
       </svg>
-      <span>Add Complaint</span>
+      <span>Homework</span>
     </button>
-    <button class="tab-btn" data-screen="master" id="tab-nav-master">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-        <line x1="3" y1="9" x2="21" y2="9"/>
-        <line x1="3" y1="15" x2="21" y2="15"/>
-        <line x1="9" y1="3" x2="9" y2="21"/>
-        <line x1="15" y1="3" x2="15" y2="21"/>
+    <button class="tab-btn" data-screen="tests" id="tab-nav-tests">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
       </svg>
-      <span>Master Sheet</span>
+      <span>Tests</span>
+    </button>
+    <button class="tab-btn" data-screen="grand-report" id="tab-nav-grand-report">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+      </svg>
+      <span>Report</span>
     </button>
   </nav>
 
   <!-- Toast Notification Container -->
-  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <div id="toast-container" class="toast-container no-print" aria-live="polite"></div>
 
   <!-- Scripts -->
+  <script src="students_data.js"></script>
   <script src="storage.js"></script>
   <script src="app.js"></script>
-  
-  <!-- Service Worker Registration for PWA Offline Support -->
+
+  <!-- Service Worker Registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
-          .then((reg) => {
-            console.log('ServiceWorker registered with scope:', reg.scope);
-          })
-          .catch((err) => {
-            console.warn('ServiceWorker registration skipped or failed:', err);
-          });
+          .then((reg) => console.log('SW registered:', reg.scope))
+          .catch((err) => console.warn('SW skipped:', err));
       });
     }
   </script>

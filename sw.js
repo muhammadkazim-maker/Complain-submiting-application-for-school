@@ -3,13 +3,14 @@
  * Enables offline capability and fast caching for Progressive Web App
  */
 
-const CACHE_NAME = 'sct-cache-v1';
+const CACHE_NAME = 'sct-cache-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './styles.css',
-  './app.js',
+  './students_data.js',
   './storage.js',
+  './app.js',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',
