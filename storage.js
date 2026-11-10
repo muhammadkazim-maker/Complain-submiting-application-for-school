@@ -56,14 +56,96 @@
     }
   }
 
+  function isQuotaError(e) {
+    if (!e) return false;
+    return e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014;
+  }
+
+  let lastSaveError = null;
+
   function save(key, val) {
+    lastSaveError = null;
     try {
       localStorage.setItem(key, JSON.stringify(val));
       return true;
     } catch (e) {
+      lastSaveError = e;
       console.error('Storage write error:', key, e);
       return false;
     }
+  }
+
+  function saveOrThrow(key, val, actionLabel = 'data') {
+    if (!save(key, val)) {
+      if (isQuotaError(lastSaveError)) {
+        throw new Error(`Unable to save ${actionLabel}: browser storage is full. Please export a JSON backup and clear old data.`);
+      }
+      throw new Error(`Unable to save ${actionLabel}: browser storage write failed or is restricted.`);
+    }
+  }
+
+  function snapshotStorageKeys() {
+    const snap = {};
+    Object.values(KEYS).forEach((k) => {
+      try {
+        snap[k] = localStorage.getItem(k);
+      } catch (e) {
+        snap[k] = null;
+      }
+    });
+    return snap;
+  }
+
+  function restoreStorageSnapshot(snap) {
+    if (!snap || typeof snap !== 'object') return;
+    Object.entries(snap).forEach(([k, raw]) => {
+      try {
+        if (raw === null || raw === undefined) {
+          localStorage.removeItem(k);
+        } else {
+          localStorage.setItem(k, raw);
+        }
+      } catch (e) {
+        console.error('Storage rollback error:', k, e);
+      }
+    });
+  }
+
+  function isPlainObject(val) {
+    return val !== null && typeof val === 'object' && !Array.isArray(val);
+  }
+
+  function hasUnsafePrototypeKeys(obj) {
+    if (!obj || typeof obj !== 'object') return false;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => hasUnsafePrototypeKeys(item));
+    }
+    for (const key of Object.keys(obj)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        return true;
+      }
+      if (hasUnsafePrototypeKeys(obj[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isValidId(id) {
+    return typeof id === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(id.trim());
+  }
+
+  function isValidDateString(val) {
+    if (typeof val !== 'string' || !val.trim()) return false;
+    return !Number.isNaN(Date.parse(val));
+  }
+
+  function sanitizeCsvCell(val) {
+    const raw = (val === undefined || val === null ? '' : String(val));
+    const safe = (/^[=+\-@\t\r\n]/.test(raw) || /^[\s\u0000-\u0020]+[=+\-@\t\r]/.test(raw))
+      ? "'" + raw
+      : raw;
+    return `"${safe.replace(/"/g, '""')}"`;
   }
 
   function generateId(prefix = 'id') {
@@ -176,7 +258,7 @@
       }
       const customMap = load(KEYS.SUBJECTS, {});
       customMap[cid] = [...current, clean];
-      save(KEYS.SUBJECTS, customMap);
+      saveOrThrow(KEYS.SUBJECTS, customMap, 'subject');
       this._notifyChange();
       return customMap[cid];
     },
@@ -234,25 +316,48 @@
       });
     },
 
-    async addComplaint({ studentId, studentName, className, text, severity }) {
+    async addComplaint({ studentId = null, studentName, className, classId, text, severity, allowCreateCustom = false }) {
       const cleanName = normalizeText(studentName);
-      const cid = normalizeClassId(className);
+      const cid = normalizeClassId(className || classId);
       const cleanText = (text || '').trim();
 
-      if (!cleanName) throw new Error('Student name is required.');
       if (!cid) throw new Error('Class is required.');
       if (!cleanText) throw new Error('Violation details are required.');
       if (!SEVERITY_CONFIG[severity]) throw new Error('Invalid severity level.');
 
       const roster = await this.getAllRosterStudents();
-      let student = studentId ? roster.find((s) => s.id === studentId) : null;
+      let student = null;
 
-      if (!student) {
+      if (studentId) {
+        student = roster.find((s) => s.id === studentId) || null;
+        if (!student) {
+          throw new Error('Selected student was not found in the roster. Please re-select the student.');
+        }
+        if (normalizeClassId(student.classId || student.className) !== cid) {
+          throw new Error(`Selected student belongs to ${this.getClassLabel(student.classId || student.className)}, not ${this.getClassLabel(cid)}. Please re-select the student.`);
+        }
+      } else {
+        if (!cleanName) throw new Error('Student name is required.');
         const targetKey = getStudentKey(cleanName, cid);
-        student = roster.find((s) => getStudentKey(s.name, s.classId || s.className) === targetKey);
+        const matches = roster.filter((s) => getStudentKey(s.name, s.classId || s.className) === targetKey);
+        if (matches.length > 1) {
+          throw new Error('Multiple students share this name in the selected class. Please select the exact student from the suggestions list.');
+        }
+        if (matches.length === 1) {
+          student = matches[0];
+        }
       }
 
+      const prevCustomRaw = (() => {
+        try { return localStorage.getItem(KEYS.CUSTOM_STUDENTS); } catch (e) { return null; }
+      })();
+      let createdCustomStudent = false;
+
       if (!student) {
+        if (!allowCreateCustom) {
+          throw new Error('Student not matched in roster. Please pick a suggested student or confirm creating a new student record.');
+        }
+        if (!cleanName) throw new Error('Student name is required.');
         const customStudents = load(KEYS.CUSTOM_STUDENTS, []);
         student = {
           id: generateId('std'),
@@ -268,7 +373,8 @@
           createdAt: new Date().toISOString()
         };
         customStudents.push(student);
-        save(KEYS.CUSTOM_STUDENTS, customStudents);
+        saveOrThrow(KEYS.CUSTOM_STUDENTS, customStudents, 'custom student');
+        createdCustomStudent = true;
       }
 
       const complaints = await this.getComplaints();
@@ -280,20 +386,33 @@
         createdAt: new Date().toISOString()
       };
       complaints.push(newComplaint);
-      save(KEYS.COMPLAINTS, complaints);
+
+      try {
+        saveOrThrow(KEYS.COMPLAINTS, complaints, 'violation record');
+      } catch (err) {
+        if (createdCustomStudent) {
+          restoreStorageSnapshot({ [KEYS.CUSTOM_STUDENTS]: prevCustomRaw });
+        }
+        throw err;
+      }
 
       this._notifyChange();
       return { student, complaint: newComplaint };
     },
 
     async deleteComplaint(complaintId) {
+      const snap = {
+        [KEYS.COMPLAINTS]: (() => { try { return localStorage.getItem(KEYS.COMPLAINTS); } catch (e) { return null; } })(),
+        [KEYS.CUSTOM_STUDENTS]: (() => { try { return localStorage.getItem(KEYS.CUSTOM_STUDENTS); } catch (e) { return null; } })()
+      };
+
       let complaints = await this.getComplaints();
       const target = complaints.find((c) => c.id === complaintId);
       if (!target) return { success: false, notFound: true };
 
       const studentId = target.studentId;
       complaints = complaints.filter((c) => c.id !== complaintId);
-      save(KEYS.COMPLAINTS, complaints);
+      saveOrThrow(KEYS.COMPLAINTS, complaints, 'violation deletion');
 
       const remaining = complaints.filter((c) => c.studentId === studentId);
       let studentDeleted = false;
@@ -304,7 +423,12 @@
         const wasCustom = customStudents.some((s) => s.id === studentId);
         if (wasCustom) {
           customStudents = customStudents.filter((s) => s.id !== studentId);
-          save(KEYS.CUSTOM_STUDENTS, customStudents);
+          try {
+            saveOrThrow(KEYS.CUSTOM_STUDENTS, customStudents, 'custom student cleanup');
+          } catch (err) {
+            restoreStorageSnapshot(snap);
+            throw err;
+          }
         }
         studentDeleted = true; // removed from active violation records list
       }
@@ -372,25 +496,77 @@
 
       const all = load(KEYS.HOMEWORKS, []);
       all.push(hw);
-      save(KEYS.HOMEWORKS, all);
+      saveOrThrow(KEYS.HOMEWORKS, all, 'homework assignment');
       this._notifyChange();
       return hw;
     },
 
-    async updateHomeworkRecords(homeworkId, updatedRecords) {
+    async updateHomeworkRecords(homeworkId, updatedRecords, metaUpdate = null) {
+      if (!homeworkId) throw new Error('Homework ID is required.');
+      if (!isPlainObject(updatedRecords)) throw new Error('Invalid homework records payload.');
+
       const all = load(KEYS.HOMEWORKS, []);
       const idx = all.findIndex((h) => h.id === homeworkId);
       if (idx === -1) throw new Error('Homework record not found.');
-      all[idx].records = { ...all[idx].records, ...updatedRecords };
-      save(KEYS.HOMEWORKS, all);
+
+      const existing = all[idx];
+      const existingRecords = isPlainObject(existing.records) ? existing.records : {};
+      const nextRecords = { ...existingRecords };
+
+      Object.entries(updatedRecords).forEach(([sid, rec]) => {
+        if (!isPlainObject(rec)) return;
+        const prev = isPlainObject(existingRecords[sid]) ? existingRecords[sid] : {};
+        const hwDone = !!rec.hwDone;
+        const conceptClear = !!rec.conceptClear;
+        const nextEntry = { hwDone, conceptClear };
+
+        if (!conceptClear) {
+          if (rec.conceptResolved === true) {
+            nextEntry.conceptResolved = true;
+            nextEntry.resolvedAt = isValidDateString(rec.resolvedAt)
+              ? rec.resolvedAt
+              : (isValidDateString(prev.resolvedAt) ? prev.resolvedAt : new Date().toISOString());
+          } else if (rec.conceptResolved === false) {
+            nextEntry.conceptResolved = false;
+          } else if (prev.conceptResolved === true) {
+            nextEntry.conceptResolved = true;
+            if (isValidDateString(prev.resolvedAt)) {
+              nextEntry.resolvedAt = prev.resolvedAt;
+            }
+          }
+        }
+
+        nextRecords[sid] = nextEntry;
+      });
+
+      all[idx] = {
+        ...existing,
+        id: existing.id,
+        classId: existing.classId,
+        subject: existing.subject,
+        createdAt: existing.createdAt,
+        dayName: existing.dayName,
+        teacherName: metaUpdate && normalizeText(metaUpdate.teacherName)
+          ? normalizeText(metaUpdate.teacherName)
+          : existing.teacherName,
+        description: metaUpdate && typeof metaUpdate.description === 'string' && metaUpdate.description.trim()
+          ? metaUpdate.description.trim()
+          : existing.description,
+        records: nextRecords,
+        updatedAt: new Date().toISOString()
+      };
+
+      saveOrThrow(KEYS.HOMEWORKS, all, 'homework checklist update');
       this._notifyChange();
       return all[idx];
     },
 
     async deleteHomework(homeworkId) {
       let all = load(KEYS.HOMEWORKS, []);
+      const before = all.length;
       all = all.filter((h) => h.id !== homeworkId);
-      save(KEYS.HOMEWORKS, all);
+      if (all.length === before) return { success: false, notFound: true };
+      saveOrThrow(KEYS.HOMEWORKS, all, 'homework deletion');
       this._notifyChange();
       return { success: true };
     },
@@ -401,7 +577,7 @@
       if (!hw || !hw.records || !hw.records[studentId]) return false;
       hw.records[studentId].conceptResolved = true;
       hw.records[studentId].resolvedAt = new Date().toISOString();
-      save(KEYS.HOMEWORKS, all);
+      saveOrThrow(KEYS.HOMEWORKS, all, 'pending task resolution');
       this._notifyChange();
       return true;
     },
@@ -412,7 +588,7 @@
       if (!hw || !hw.records || !hw.records[studentId]) return false;
       hw.records[studentId].conceptResolved = false;
       delete hw.records[studentId].resolvedAt;
-      save(KEYS.HOMEWORKS, all);
+      saveOrThrow(KEYS.HOMEWORKS, all, 'pending task reopen');
       this._notifyChange();
       return true;
     },
@@ -535,18 +711,25 @@
       const cleanName = normalizeText(name);
       if (!cleanName) throw new Error('Test name is required.');
 
+      const parsedDefault = defaultTotalMarks === undefined || defaultTotalMarks === null || String(defaultTotalMarks).trim() === ''
+        ? 100
+        : Number(defaultTotalMarks);
+      if (!Number.isFinite(parsedDefault) || parsedDefault <= 0) {
+        throw new Error('Default Total Marks must be a finite positive number greater than 0.');
+      }
+
       const tests = load(KEYS.TESTS, []);
       const newTest = {
         id: generateId('tst'),
         name: cleanName,
-        defaultTotalMarks: Number(defaultTotalMarks) > 0 ? Number(defaultTotalMarks) : 100,
+        defaultTotalMarks: parsedDefault,
         createdAt: new Date().toISOString(),
         subjectTotals: {},
         subjectDates: {},
         marks: {} // key: `${classId}|${subject}` -> { [studentId]: number }
       };
       tests.push(newTest);
-      save(KEYS.TESTS, tests);
+      saveOrThrow(KEYS.TESTS, tests, 'monthly test');
       this._notifyChange();
       return newTest;
     },
@@ -554,7 +737,7 @@
     async deleteTest(testId) {
       let tests = load(KEYS.TESTS, []);
       tests = tests.filter((t) => t.id !== testId);
-      save(KEYS.TESTS, tests);
+      saveOrThrow(KEYS.TESTS, tests, 'monthly test deletion');
       this._notifyChange();
       return { success: true };
     },
@@ -564,6 +747,32 @@
       const test = tests.find((t) => t.id === testId);
       if (!test) throw new Error('Monthly test not found.');
 
+      const parsedTotal = Number(totalMarks);
+      if (totalMarks === '' || totalMarks === null || totalMarks === undefined || !Number.isFinite(parsedTotal) || parsedTotal <= 0) {
+        throw new Error('Total Marks must be a finite number greater than 0.');
+      }
+
+      const cleanDate = testDate ? String(testDate).trim() : '';
+      if (cleanDate && !isValidDateString(cleanDate)) {
+        throw new Error('Please enter a valid Test Date.');
+      }
+
+      if (!isPlainObject(marksByStudentId)) {
+        throw new Error('Invalid marks submission.');
+      }
+
+      const validatedMarks = {};
+      for (const [sid, rawVal] of Object.entries(marksByStudentId)) {
+        if (rawVal === undefined || rawVal === null || String(rawVal).trim() === '') {
+          continue; // Keep blank marks distinct from 0 (omitted from saved scores)
+        }
+        const m = Number(rawVal);
+        if (!Number.isFinite(m) || m < 0 || m > parsedTotal) {
+          throw new Error(`Invalid marks (${rawVal}) for student ID ${sid}. Obtained marks must be between 0 and ${parsedTotal}.`);
+        }
+        validatedMarks[sid] = m;
+      }
+
       const cid = normalizeClassId(classId);
       const key = `${cid}|${subject}`;
 
@@ -571,11 +780,15 @@
       if (!test.subjectDates) test.subjectDates = {};
       if (!test.marks) test.marks = {};
 
-      test.subjectTotals[key] = Number(totalMarks) > 0 ? Number(totalMarks) : (test.defaultTotalMarks || 100);
-      if (testDate) test.subjectDates[key] = testDate;
-      test.marks[key] = marksByStudentId;
+      test.subjectTotals[key] = parsedTotal;
+      if (cleanDate) {
+        test.subjectDates[key] = cleanDate;
+      } else {
+        delete test.subjectDates[key];
+      }
+      test.marks[key] = validatedMarks;
 
-      save(KEYS.TESTS, tests);
+      saveOrThrow(KEYS.TESTS, tests, 'test marks');
       this._notifyChange();
       return test;
     },
@@ -725,21 +938,20 @@
 
       const sorted = [...complaints].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       const headers = ['#', 'Student Name', 'Roll No', 'Class', 'Violation', 'Severity', 'Date', 'Time', 'ISO Timestamp'];
-      const esc = (str) => `"${(str || '').toString().replace(/"/g, '""')}"`;
 
       const rows = sorted.map((c, idx) => {
         const s = studentMap.get(c.studentId) || { name: 'Unknown', rollNumber: '-', classId: 'N/A' };
         const d = new Date(c.createdAt);
         return [
           idx + 1,
-          esc(s.name),
-          esc(s.rollNumber || '-'),
-          esc(this.getClassLabel(s.classId || s.className)),
-          esc(c.text),
-          esc(c.severity),
-          esc(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })),
-          esc(d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })),
-          esc(c.createdAt)
+          sanitizeCsvCell(s.name),
+          sanitizeCsvCell(s.rollNumber || '-'),
+          sanitizeCsvCell(this.getClassLabel(s.classId || s.className)),
+          sanitizeCsvCell(c.text),
+          sanitizeCsvCell(c.severity),
+          sanitizeCsvCell(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })),
+          sanitizeCsvCell(d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })),
+          sanitizeCsvCell(c.createdAt)
         ].join(',');
       });
 
@@ -759,18 +971,411 @@
       };
     },
 
+    async validateAndPreviewImportJSON(data) {
+      if (!isPlainObject(data)) {
+        throw new Error('Invalid backup file: top-level JSON value must be an object.');
+      }
+      if (hasUnsafePrototypeKeys(data)) {
+        throw new Error('Unsafe keys detected in backup JSON.');
+      }
+
+      const supportedVersions = new Set(['1.0', '2.0']);
+      if (typeof data.version !== 'string' || !supportedVersions.has(data.version.trim())) {
+        throw new Error(`Unsupported or missing backup schema version (${String(data.version || 'missing')}). Expected "2.0".`);
+      }
+
+      if (data.app !== undefined) {
+        if (typeof data.app !== 'string' || !data.app.toLowerCase().includes('hadi')) {
+          throw new Error('Unrecognized backup source: missing Hadi Education System Portal identifier.');
+        }
+      }
+
+      if (data.exportedAt !== undefined && !isValidDateString(data.exportedAt)) {
+        throw new Error('Invalid backup exportedAt timestamp.');
+      }
+
+      const hasAnySection = ['customStudents', 'complaints', 'homeworks', 'tests', 'customSubjects']
+        .some((k) => Object.prototype.hasOwnProperty.call(data, k));
+      if (!hasAnySection) {
+        throw new Error('Empty or invalid backup: no recognized portal data sections found.');
+      }
+
+      if (data.customStudents !== undefined && !Array.isArray(data.customStudents)) {
+        throw new Error('Invalid backup: "customStudents" must be an array.');
+      }
+      if (data.complaints !== undefined && !Array.isArray(data.complaints)) {
+        throw new Error('Invalid backup: "complaints" must be an array.');
+      }
+      if (data.homeworks !== undefined && !Array.isArray(data.homeworks)) {
+        throw new Error('Invalid backup: "homeworks" must be an array.');
+      }
+      if (data.tests !== undefined && !Array.isArray(data.tests)) {
+        throw new Error('Invalid backup: "tests" must be an array.');
+      }
+      if (data.customSubjects !== undefined && !isPlainObject(data.customSubjects)) {
+        throw new Error('Invalid backup: "customSubjects" must be an object.');
+      }
+
+      const validClasses = new Set(this.getClasses().map((c) => normalizeClassId(c.id)));
+      const official = (window.SchoolDirectory && window.SchoolDirectory.OFFICIAL_STUDENTS) || [];
+      const officialIds = new Set(official.map((s) => s.id));
+      const customIds = new Set();
+
+      const rawCustomStudents = data.customStudents || [];
+      const cleanCustomStudents = rawCustomStudents.map((s, idx) => {
+        if (!isPlainObject(s)) throw new Error(`Invalid custom student at index ${idx}.`);
+        if (!isValidId(s.id)) throw new Error(`Invalid custom student ID at index ${idx}.`);
+        if (officialIds.has(s.id) || customIds.has(s.id)) {
+          throw new Error(`Duplicate or conflicting student ID "${s.id}" in backup.`);
+        }
+        customIds.add(s.id);
+
+        const cleanName = normalizeText(s.name);
+        if (!cleanName) throw new Error(`Custom student "${s.id}" is missing a valid name.`);
+        const cid = normalizeClassId(s.classId || s.className);
+        if (!validClasses.has(cid)) {
+          throw new Error(`Custom student "${s.id}" has unrecognized class "${String(s.classId || s.className)}".`);
+        }
+        if (s.createdAt !== undefined && !isValidDateString(s.createdAt)) {
+          throw new Error(`Custom student "${s.id}" has an invalid createdAt timestamp.`);
+        }
+
+        return {
+          id: s.id.trim(),
+          name: cleanName,
+          rollNumber: typeof s.rollNumber === 'string' && s.rollNumber.trim() ? normalizeText(s.rollNumber) : '-',
+          classId: cid,
+          className: cid,
+          section: typeof s.section === 'string' && s.section.trim() ? normalizeText(s.section) : 'Custom',
+          family: typeof s.family === 'string' ? normalizeText(s.family) : '-',
+          phone: typeof s.phone === 'string' ? normalizeText(s.phone) : '-',
+          whatsapp: typeof s.whatsapp === 'string' ? normalizeText(s.whatsapp) : '-',
+          isOfficial: false,
+          createdAt: s.createdAt || new Date().toISOString()
+        };
+      });
+
+      const validStudentIds = new Set([...officialIds, ...customIds]);
+      const seenComplaintIds = new Set();
+      const rawComplaints = data.complaints || [];
+      const cleanComplaints = rawComplaints.map((c, idx) => {
+        if (!isPlainObject(c)) throw new Error(`Invalid violation entry at index ${idx}.`);
+        if (!isValidId(c.id) || seenComplaintIds.has(c.id)) {
+          throw new Error(`Invalid or duplicate violation ID at index ${idx}.`);
+        }
+        seenComplaintIds.add(c.id);
+
+        if (!isValidId(c.studentId) || !validStudentIds.has(c.studentId)) {
+          throw new Error(`Violation "${c.id}" references missing student ID "${String(c.studentId)}".`);
+        }
+        if (typeof c.text !== 'string' || !c.text.trim()) {
+          throw new Error(`Violation "${c.id}" has empty description text.`);
+        }
+        if (typeof c.severity !== 'string' || !SEVERITY_CONFIG[c.severity]) {
+          throw new Error(`Violation "${c.id}" has unsupported severity "${String(c.severity)}".`);
+        }
+        if (!isValidDateString(c.createdAt)) {
+          throw new Error(`Violation "${c.id}" has invalid createdAt date.`);
+        }
+
+        return {
+          id: c.id.trim(),
+          studentId: c.studentId.trim(),
+          text: normalizeText(c.text),
+          severity: c.severity,
+          createdAt: c.createdAt
+        };
+      });
+
+      const validDays = new Set(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+      const seenHwIds = new Set();
+      const rawHomeworks = data.homeworks || [];
+      const cleanHomeworks = rawHomeworks.map((h, idx) => {
+        if (!isPlainObject(h)) throw new Error(`Invalid homework entry at index ${idx}.`);
+        if (!isValidId(h.id) || seenHwIds.has(h.id)) {
+          throw new Error(`Invalid or duplicate homework ID at index ${idx}.`);
+        }
+        seenHwIds.add(h.id);
+
+        const cid = normalizeClassId(h.classId);
+        if (!validClasses.has(cid)) {
+          throw new Error(`Homework "${h.id}" references unrecognized class "${String(h.classId)}".`);
+        }
+        if (typeof h.subject !== 'string' || !normalizeText(h.subject)) {
+          throw new Error(`Homework "${h.id}" is missing subject name.`);
+        }
+        if (typeof h.teacherName !== 'string' || !normalizeText(h.teacherName)) {
+          throw new Error(`Homework "${h.id}" is missing teacher name.`);
+        }
+        if (typeof h.description !== 'string' || !h.description.trim()) {
+          throw new Error(`Homework "${h.id}" is missing description.`);
+        }
+        if (typeof h.dayName !== 'string' || !validDays.has(h.dayName.trim())) {
+          throw new Error(`Homework "${h.id}" has invalid dayName "${String(h.dayName)}".`);
+        }
+        if (!isValidDateString(h.createdAt)) {
+          throw new Error(`Homework "${h.id}" has invalid createdAt date.`);
+        }
+        if (!isPlainObject(h.records)) {
+          throw new Error(`Homework "${h.id}" records must be a student-keyed object.`);
+        }
+
+        const cleanRecords = {};
+        for (const [sid, rec] of Object.entries(h.records)) {
+          if (!isValidId(sid) || !validStudentIds.has(sid)) {
+            throw new Error(`Homework "${h.id}" references unknown student ID "${sid}".`);
+          }
+          if (!isPlainObject(rec)) {
+            throw new Error(`Homework "${h.id}" has invalid record object for student "${sid}".`);
+          }
+          if (typeof rec.hwDone !== 'boolean' || typeof rec.conceptClear !== 'boolean') {
+            throw new Error(`Homework "${h.id}" flags for student "${sid}" must be booleans.`);
+          }
+          if (rec.conceptResolved !== undefined && typeof rec.conceptResolved !== 'boolean') {
+            throw new Error(`Homework "${h.id}" conceptResolved flag for student "${sid}" must be boolean.`);
+          }
+          if (rec.resolvedAt !== undefined && rec.resolvedAt !== null && !isValidDateString(rec.resolvedAt)) {
+            throw new Error(`Homework "${h.id}" resolvedAt timestamp for student "${sid}" is invalid.`);
+          }
+          const recOut = { hwDone: rec.hwDone, conceptClear: rec.conceptClear };
+          if (rec.conceptResolved !== undefined) recOut.conceptResolved = rec.conceptResolved;
+          if (rec.resolvedAt) recOut.resolvedAt = rec.resolvedAt;
+          cleanRecords[sid] = recOut;
+        }
+
+        const hwOut = {
+          id: h.id.trim(),
+          classId: cid,
+          subject: normalizeText(h.subject),
+          teacherName: normalizeText(h.teacherName),
+          description: h.description.trim(),
+          dayName: h.dayName.trim(),
+          createdAt: h.createdAt,
+          records: cleanRecords
+        };
+        if (h.updatedAt && isValidDateString(h.updatedAt)) hwOut.updatedAt = h.updatedAt;
+        return hwOut;
+      });
+
+      const seenTestIds = new Set();
+      const rawTests = data.tests || [];
+      const cleanTests = rawTests.map((t, idx) => {
+        if (!isPlainObject(t)) throw new Error(`Invalid test entry at index ${idx}.`);
+        if (!isValidId(t.id) || seenTestIds.has(t.id)) {
+          throw new Error(`Invalid or duplicate test ID at index ${idx}.`);
+        }
+        seenTestIds.add(t.id);
+
+        if (typeof t.name !== 'string' || !normalizeText(t.name)) {
+          throw new Error(`Test "${t.id}" is missing a valid name.`);
+        }
+        if (typeof t.defaultTotalMarks !== 'number' || !Number.isFinite(t.defaultTotalMarks) || t.defaultTotalMarks <= 0) {
+          throw new Error(`Test "${t.id}" defaultTotalMarks must be a finite positive number.`);
+        }
+        if (!isValidDateString(t.createdAt)) {
+          throw new Error(`Test "${t.id}" has invalid createdAt date.`);
+        }
+
+        const cleanTotals = {};
+        if (t.subjectTotals !== undefined) {
+          if (!isPlainObject(t.subjectTotals)) throw new Error(`Test "${t.id}" subjectTotals must be an object.`);
+          for (const [k, v] of Object.entries(t.subjectTotals)) {
+            const parts = k.split('|');
+            if (parts.length !== 2 || !validClasses.has(normalizeClassId(parts[0])) || !parts[1].trim()) {
+              throw new Error(`Test "${t.id}" has invalid subjectTotals key "${k}".`);
+            }
+            if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+              throw new Error(`Test "${t.id}" subject total for "${k}" must be a positive number.`);
+            }
+            cleanTotals[`${normalizeClassId(parts[0])}|${normalizeText(parts[1])}`] = v;
+          }
+        }
+
+        const cleanDates = {};
+        if (t.subjectDates !== undefined) {
+          if (!isPlainObject(t.subjectDates)) throw new Error(`Test "${t.id}" subjectDates must be an object.`);
+          for (const [k, dVal] of Object.entries(t.subjectDates)) {
+            const parts = k.split('|');
+            if (parts.length !== 2 || !validClasses.has(normalizeClassId(parts[0])) || !parts[1].trim()) {
+              throw new Error(`Test "${t.id}" has invalid subjectDates key "${k}".`);
+            }
+            if (dVal !== null && dVal !== '' && !isValidDateString(String(dVal))) {
+              throw new Error(`Test "${t.id}" has invalid date "${String(dVal)}" for "${k}".`);
+            }
+            if (dVal) {
+              cleanDates[`${normalizeClassId(parts[0])}|${normalizeText(parts[1])}`] = String(dVal).trim();
+            }
+          }
+        }
+
+        const cleanMarks = {};
+        if (t.marks !== undefined) {
+          if (!isPlainObject(t.marks)) throw new Error(`Test "${t.id}" marks must be an object.`);
+          for (const [k, stuMarks] of Object.entries(t.marks)) {
+            const parts = k.split('|');
+            if (parts.length !== 2 || !validClasses.has(normalizeClassId(parts[0])) || !parts[1].trim()) {
+              throw new Error(`Test "${t.id}" has invalid marks key "${k}".`);
+            }
+            if (!isPlainObject(stuMarks)) {
+              throw new Error(`Test "${t.id}" marks entry for "${k}" must be an object.`);
+            }
+            const canonicalKey = `${normalizeClassId(parts[0])}|${normalizeText(parts[1])}`;
+            const subjTotal = cleanTotals[canonicalKey] || t.defaultTotalMarks;
+            const outSubjMarks = {};
+
+            for (const [sid, mVal] of Object.entries(stuMarks)) {
+              if (!isValidId(sid) || !validStudentIds.has(sid)) {
+                throw new Error(`Test "${t.id}" marks for "${k}" reference unknown student ID "${sid}".`);
+              }
+              if (mVal === null || mVal === undefined || mVal === '') continue;
+              if (typeof mVal !== 'number' || !Number.isFinite(mVal) || mVal < 0 || mVal > subjTotal) {
+                throw new Error(`Test "${t.id}" marks (${String(mVal)}) for student "${sid}" in "${k}" must be between 0 and ${subjTotal}.`);
+              }
+              outSubjMarks[sid] = mVal;
+            }
+            cleanMarks[canonicalKey] = outSubjMarks;
+          }
+        }
+
+        return {
+          id: t.id.trim(),
+          name: normalizeText(t.name),
+          defaultTotalMarks: t.defaultTotalMarks,
+          createdAt: t.createdAt,
+          subjectTotals: cleanTotals,
+          subjectDates: cleanDates,
+          marks: cleanMarks
+        };
+      });
+
+      const cleanSubjects = {};
+      if (data.customSubjects !== undefined) {
+        for (const [clsKey, subjArr] of Object.entries(data.customSubjects)) {
+          const cid = normalizeClassId(clsKey);
+          if (!validClasses.has(cid)) {
+            throw new Error(`customSubjects references unrecognized class "${clsKey}".`);
+          }
+          if (!Array.isArray(subjArr)) {
+            throw new Error(`customSubjects["${clsKey}"] must be an array.`);
+          }
+          const seenSubj = new Set();
+          const cleanedList = [];
+          subjArr.forEach((s, idx) => {
+            if (typeof s !== 'string' || !normalizeText(s)) {
+              throw new Error(`Invalid subject name at customSubjects["${clsKey}"][${idx}].`);
+            }
+            const norm = normalizeText(s);
+            if (!seenSubj.has(norm.toLowerCase())) {
+              seenSubj.add(norm.toLowerCase());
+              cleanedList.push(norm);
+            }
+          });
+          cleanSubjects[cid] = cleanedList;
+        }
+      }
+
+      const subjClassesCount = Object.keys(cleanSubjects).length;
+      const totalItems = cleanCustomStudents.length + cleanComplaints.length + cleanHomeworks.length + cleanTests.length + subjClassesCount;
+      if (totalItems === 0) {
+        throw new Error('Backup contains 0 records. Empty backups are rejected to protect existing data.');
+      }
+
+      return {
+        valid: true,
+        preview: {
+          version: data.version.trim(),
+          exportedAt: data.exportedAt || null,
+          customStudentsCount: cleanCustomStudents.length,
+          complaintsCount: cleanComplaints.length,
+          homeworksCount: cleanHomeworks.length,
+          testsCount: cleanTests.length,
+          customSubjectsCount: Object.values(cleanSubjects).reduce((acc, arr) => acc + arr.length, 0)
+        },
+        sanitizedData: {
+          customStudents: cleanCustomStudents,
+          complaints: cleanComplaints,
+          homeworks: cleanHomeworks,
+          tests: cleanTests,
+          customSubjects: cleanSubjects
+        }
+      };
+    },
+
+    _lastRecoverySnapshot: null,
+
+    hasRecoverySnapshot() {
+      if (this._lastRecoverySnapshot) return true;
+      try {
+        return !!sessionStorage.getItem('hes_pre_import_recovery_v1');
+      } catch (e) {
+        return false;
+      }
+    },
+
+    async restoreRecoverySnapshot() {
+      let snap = this._lastRecoverySnapshot;
+      if (!snap) {
+        try {
+          const raw = sessionStorage.getItem('hes_pre_import_recovery_v1');
+          if (raw) snap = JSON.parse(raw);
+        } catch (e) {
+          snap = null;
+        }
+      }
+      if (!snap || !isPlainObject(snap.snapshot)) {
+        throw new Error('No pre-import recovery snapshot is available.');
+      }
+      const currentSnap = snapshotStorageKeys();
+      try {
+        Object.entries(snap.snapshot).forEach(([k, valRaw]) => {
+          if (valRaw === null || valRaw === undefined) {
+            localStorage.removeItem(k);
+          } else {
+            localStorage.setItem(k, valRaw);
+          }
+        });
+      } catch (err) {
+        restoreStorageSnapshot(currentSnap);
+        throw new Error('Unable to restore recovery snapshot: browser storage write failed.');
+      }
+      this._notifyChange();
+      return { restoredAt: snap.capturedAt };
+    },
+
     async importJSON(data) {
-      if (!data || typeof data !== 'object') throw new Error('Invalid backup file.');
-      if (Array.isArray(data.customStudents)) save(KEYS.CUSTOM_STUDENTS, data.customStudents);
-      if (Array.isArray(data.complaints)) save(KEYS.COMPLAINTS, data.complaints);
-      if (Array.isArray(data.homeworks)) save(KEYS.HOMEWORKS, data.homeworks);
-      if (Array.isArray(data.tests)) save(KEYS.TESTS, data.tests);
-      if (data.customSubjects && typeof data.customSubjects === 'object') save(KEYS.SUBJECTS, data.customSubjects);
+      const validated = await this.validateAndPreviewImportJSON(data);
+      const clean = validated.sanitizedData;
+      const preImportSnapshot = snapshotStorageKeys();
+      const recoveryRecord = {
+        capturedAt: new Date().toISOString(),
+        snapshot: preImportSnapshot
+      };
+
+      this._lastRecoverySnapshot = recoveryRecord;
+      try {
+        sessionStorage.setItem('hes_pre_import_recovery_v1', JSON.stringify(recoveryRecord));
+      } catch (e) {
+        // Non-fatal: in-memory recovery snapshot remains intact for rollback
+      }
+
+      try {
+        saveOrThrow(KEYS.CUSTOM_STUDENTS, clean.customStudents, 'custom students backup');
+        saveOrThrow(KEYS.COMPLAINTS, clean.complaints, 'violations backup');
+        saveOrThrow(KEYS.HOMEWORKS, clean.homeworks, 'homeworks backup');
+        saveOrThrow(KEYS.TESTS, clean.tests, 'monthly tests backup');
+        saveOrThrow(KEYS.SUBJECTS, clean.customSubjects, 'custom subjects backup');
+      } catch (err) {
+        restoreStorageSnapshot(preImportSnapshot);
+        throw new Error(`Backup import aborted and rolled back cleanly (${err.message})`);
+      }
+
       this._notifyChange();
       return {
-        complaintsCount: (data.complaints || []).length,
-        homeworksCount: (data.homeworks || []).length,
-        testsCount: (data.tests || []).length
+        customStudentsCount: clean.customStudents.length,
+        complaintsCount: clean.complaints.length,
+        homeworksCount: clean.homeworks.length,
+        testsCount: clean.tests.length,
+        recoverySaved: true
       };
     },
 
@@ -780,10 +1385,14 @@
       if (complaints.length > 0 && complaints.some((c) => c.id && c.id.startsWith('cmp_demo_'))) {
         // Remove old synthetic demo complaints so only real school records/user entries remain
         const cleaned = complaints.filter((c) => !c.id.startsWith('cmp_demo_'));
-        save(KEYS.COMPLAINTS, cleaned);
+        saveOrThrow(KEYS.COMPLAINTS, cleaned, 'migration cleanup');
       }
       // Clear legacy demo students list
-      localStorage.removeItem('sct_students_v1');
+      try {
+        localStorage.removeItem('sct_students_v1');
+      } catch (e) {
+        console.error('Legacy cleanup error:', e);
+      }
     },
 
     _listeners: [],

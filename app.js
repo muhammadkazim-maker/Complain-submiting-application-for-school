@@ -24,8 +24,9 @@
     hwSubject: null,
     hwSectionFilter: 'ALL',
     hwFormOpen: false,
+    hwEditingId: null,
     hwDraftMeta: null,
-    hwDraftMarks: {}, // studentId -> { hwDone: true, conceptClear: true }
+    hwDraftMarks: {}, // studentId -> { hwDone: true, conceptClear: true, conceptResolved?: boolean, resolvedAt?: string }
     hwModalStudentId: null,
     hwModalRange: '30d',
     hwModalCustomStart: '',
@@ -36,16 +37,19 @@
     testClassId: null,
     testSubject: null,
     testSectionFilter: 'ALL',
+    testsDirty: false,
 
     // Grand Report module
     grandClassId: null,
     grandStudentId: null,
     grandSearch: '',
+    grandSearchComposing: false,
     grandSectionFilter: 'ALL',
     grandHwRange: 'all',
 
     // Pending confirmation callback
-    confirmCallback: null
+    confirmCallback: null,
+    confirmCancelCallback: null
   };
 
   /* ========================================================================
@@ -110,24 +114,73 @@
     }, duration);
   }
 
-  function openConfirmDialog({ title, message, confirmLabel = 'Confirm', onConfirm }) {
+  function openConfirmDialog({
+    title,
+    message,
+    detailsHtml = '',
+    confirmLabel = 'Confirm',
+    confirmBtnClass = 'btn-danger',
+    onConfirm,
+    onCancel = null
+  }) {
     document.getElementById('confirm-title').textContent = title || 'Confirm Action';
     document.getElementById('confirm-msg').textContent = message || 'Are you sure?';
+    const detailsEl = document.getElementById('confirm-details');
+    if (detailsEl) {
+      if (detailsHtml) {
+        detailsEl.innerHTML = detailsHtml;
+        detailsEl.style.display = 'block';
+      } else {
+        detailsEl.innerHTML = '';
+        detailsEl.style.display = 'none';
+      }
+    }
     const proceedBtn = document.getElementById('btn-confirm-proceed');
     proceedBtn.textContent = confirmLabel;
+    proceedBtn.className = `btn ${confirmBtnClass}`;
     state.confirmCallback = onConfirm;
+    state.confirmCancelCallback = onCancel;
     document.getElementById('confirm-modal').classList.add('open');
   }
 
-  function closeConfirmDialog() {
+  function closeConfirmDialog(triggerCancel = false) {
+    const cancelCb = triggerCancel ? state.confirmCancelCallback : null;
     document.getElementById('confirm-modal').classList.remove('open');
     state.confirmCallback = null;
+    state.confirmCancelCallback = null;
+    if (typeof cancelCb === 'function') cancelCb();
+  }
+
+  function hasUnsavedTestMarks() {
+    return state.currentScreen === 'tests' && !!state.testId && !!state.testClassId && !!state.testSubject && !!state.testsDirty;
+  }
+
+  function guardUnsavedTestMarks(proceedCallback) {
+    if (hasUnsavedTestMarks()) {
+      openConfirmDialog({
+        title: 'Unsaved Test Marks',
+        message: 'You have unsaved marks changes for this subject. Discard unsaved changes and continue?',
+        confirmLabel: 'Discard Changes',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: () => {
+          state.testsDirty = false;
+          proceedCallback();
+        }
+      });
+      return;
+    }
+    proceedCallback();
   }
 
   /* ========================================================================
      Navigation Controller
      ======================================================================== */
-  function switchScreen(screenName) {
+  function switchScreen(screenName, bypassDirtyCheck = false) {
+    if (!bypassDirtyCheck && screenName !== state.currentScreen && hasUnsavedTestMarks()) {
+      guardUnsavedTestMarks(() => switchScreen(screenName, true));
+      return;
+    }
+
     state.currentScreen = screenName;
 
     document.querySelectorAll('.screen').forEach((el) => {
@@ -204,7 +257,7 @@
     const hwSelect = document.getElementById('hw-select-class');
     const pendingFilter = document.getElementById('pending-filter-class');
 
-    const optsHtml = classes.map((c) => `<option value="${c.id}">${escapeHTML(c.label)}</option>`).join('');
+    const optsHtml = classes.map((c) => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.label)}</option>`).join('');
 
     formSelect.innerHTML = '<option value="">-- Select Class --</option>' + optsHtml;
     filterSelect.innerHTML = '<option value="ALL">All Classes</option>' + optsHtml;
@@ -212,16 +265,82 @@
     pendingFilter.innerHTML = '<option value="ALL">All Classes</option>' + optsHtml;
   }
 
+  function clearViolationBanners() {
+    const succ = document.getElementById('form-success-banner');
+    const err = document.getElementById('form-error-banner');
+    if (succ) succ.classList.add('hidden');
+    if (err) err.classList.add('hidden');
+  }
+
+  async function updateViolationMatchStatus() {
+    const statusEl = document.getElementById('violation-match-status');
+    const idInput = document.getElementById('input-student-id');
+    const nameInput = document.getElementById('input-student-name');
+    const classSelect = document.getElementById('select-class');
+    if (!statusEl || !idInput || !nameInput || !classSelect) return;
+
+    const sid = idInput.value.trim();
+    const typedName = nameInput.value.trim();
+    const cid = classSelect.value ? window.AppStorage.normalizeClassId(classSelect.value) : '';
+
+    if (sid) {
+      const stu = await window.AppStorage.getStudentById(sid);
+      const stuCid = stu ? window.AppStorage.normalizeClassId(stu.classId || stu.className) : '';
+      if (stu && (!cid || stuCid === cid)) {
+        statusEl.className = 'violation-match-status matched';
+        statusEl.textContent = `Selected student: ${stu.name} (${window.AppStorage.getClassLabel(stu.classId)} • Roll #${stu.rollNumber || '-'})`;
+        return;
+      }
+      // Class changed or student missing -> clear stale ID
+      idInput.value = '';
+    }
+
+    if (!typedName) {
+      statusEl.className = 'violation-match-status';
+      statusEl.textContent = '';
+      return;
+    }
+
+    const roster = await window.AppStorage.getAllRosterStudents();
+    const normTyped = window.AppStorage.normalizeText(typedName).toLowerCase();
+    const sameClass = cid
+      ? roster.filter((s) => window.AppStorage.normalizeText(s.name).toLowerCase() === normTyped && window.AppStorage.normalizeClassId(s.classId || s.className) === cid)
+      : [];
+    const otherClass = cid
+      ? roster.filter((s) => window.AppStorage.normalizeText(s.name).toLowerCase() === normTyped && window.AppStorage.normalizeClassId(s.classId || s.className) !== cid)
+      : [];
+
+    if (sameClass.length === 1) {
+      statusEl.className = 'violation-match-status unmatched';
+      statusEl.textContent = `Matches ${sameClass[0].name} (Roll #${sameClass[0].rollNumber || '-'}) — pick from suggestions or submit to confirm.`;
+    } else if (sameClass.length > 1) {
+      statusEl.className = 'violation-match-status unmatched';
+      statusEl.textContent = `Multiple students named "${typedName}" exist in this class — select one from suggestions.`;
+    } else if (otherClass.length > 0) {
+      const classesList = otherClass.map((s) => window.AppStorage.getClassLabel(s.classId || s.className)).join(', ');
+      statusEl.className = 'violation-match-status unmatched';
+      statusEl.textContent = `"${typedName}" exists in ${classesList} (not ${window.AppStorage.getClassLabel(cid)}). Re-select or submit to confirm a separate record.`;
+    } else if (cid) {
+      statusEl.className = 'violation-match-status unmatched';
+      statusEl.textContent = `Not in ${window.AppStorage.getClassLabel(cid)} roster — submitting will ask to confirm creating a new custom student.`;
+    } else {
+      statusEl.className = 'violation-match-status';
+      statusEl.textContent = 'Select a class or pick a student from the suggestions list.';
+    }
+  }
+
   async function handleViolationNameInput(e) {
     const val = e.target.value.trim().toLowerCase();
     document.getElementById('input-student-id').value = '';
     document.getElementById('val-student-name').classList.remove('visible');
     e.target.classList.remove('is-invalid');
+    clearViolationBanners();
 
     const dropdown = document.getElementById('autocomplete-list');
     if (!val) {
       dropdown.classList.remove('show');
       dropdown.innerHTML = '';
+      await updateViolationMatchStatus();
       return;
     }
 
@@ -233,6 +352,7 @@
     if (matches.length === 0) {
       dropdown.classList.remove('show');
       dropdown.innerHTML = '';
+      await updateViolationMatchStatus();
       return;
     }
 
@@ -246,9 +366,10 @@
       </div>
     `).join('');
     dropdown.classList.add('show');
+    await updateViolationMatchStatus();
   }
 
-  function handleViolationAutocompletePick(e) {
+  async function handleViolationAutocompletePick(e) {
     const item = e.target.closest('.autocomplete-item');
     if (!item) return;
 
@@ -261,12 +382,65 @@
     document.getElementById('input-student-name').classList.remove('is-invalid');
     document.getElementById('val-class').classList.remove('visible');
     document.getElementById('select-class').classList.remove('is-invalid');
+    clearViolationBanners();
+    await updateViolationMatchStatus();
     document.getElementById('textarea-complaint').focus();
+  }
+
+  async function executeViolationSave({ resolvedStudentId = null, allowCreateCustom = false }) {
+    const nameInput = document.getElementById('input-student-name');
+    const classSelect = document.getElementById('select-class');
+    const textArea = document.getElementById('textarea-complaint');
+    const sevInput = document.getElementById('input-severity-value');
+    const successBanner = document.getElementById('form-success-banner');
+    const errorBanner = document.getElementById('form-error-banner');
+
+    try {
+      const res = await window.AppStorage.addComplaint({
+        studentId: resolvedStudentId,
+        studentName: nameInput.value.trim(),
+        className: classSelect.value,
+        text: textArea.value.trim(),
+        severity: sevInput.value,
+        allowCreateCustom
+      });
+
+      if (errorBanner) errorBanner.classList.add('hidden');
+      document.getElementById('success-banner-details').textContent =
+        `Recorded for ${res.student.name} (${window.AppStorage.getClassLabel(res.student.classId)}) on ${formatDateTime(res.complaint.createdAt)}. Severity: ${res.complaint.severity}.`;
+      successBanner.classList.remove('hidden');
+
+      showToast(`Violation logged at ${formatTimeOnly(res.complaint.createdAt)}`, 'success');
+
+      document.getElementById('complaint-form').reset();
+      document.getElementById('input-student-id').value = '';
+      sevInput.value = '';
+      state.selectedSeverity = '';
+      document.querySelectorAll('.sev-btn').forEach((b) => {
+        b.classList.remove('selected');
+        b.setAttribute('aria-checked', 'false');
+      });
+      document.getElementById('char-counter').textContent = '0 chars';
+      await updateViolationMatchStatus();
+
+      await refreshViolationsModule();
+      await updateHomeStats();
+      setTimeout(() => successBanner.classList.add('hidden'), 8000);
+    } catch (err) {
+      if (successBanner) successBanner.classList.add('hidden');
+      if (errorBanner) {
+        document.getElementById('error-banner-details').textContent = err.message || 'Unable to save violation to browser storage.';
+        errorBanner.classList.remove('hidden');
+      }
+      showToast(err.message || 'Error saving violation.', 'error');
+    }
   }
 
   async function handleViolationSubmit(e) {
     e.preventDefault();
-    const studentId = document.getElementById('input-student-id').value;
+    clearViolationBanners();
+
+    const studentIdInput = document.getElementById('input-student-id');
     const nameInput = document.getElementById('input-student-name');
     const classSelect = document.getElementById('select-class');
     const textArea = document.getElementById('textarea-complaint');
@@ -294,38 +468,96 @@
     }
     if (!valid) return;
 
-    try {
-      const res = await window.AppStorage.addComplaint({
-        studentId: studentId || null,
-        studentName: nameInput.value.trim(),
-        className: classSelect.value,
-        text: textArea.value.trim(),
-        severity: sevInput.value
-      });
+    const cid = window.AppStorage.normalizeClassId(classSelect.value);
+    const cleanName = window.AppStorage.normalizeText(nameInput.value);
+    const normLower = cleanName.toLowerCase();
+    const roster = await window.AppStorage.getAllRosterStudents();
 
-      const banner = document.getElementById('form-success-banner');
-      document.getElementById('success-banner-details').textContent =
-        `Recorded for ${res.student.name} (${window.AppStorage.getClassLabel(res.student.classId)}) on ${formatDateTime(res.complaint.createdAt)}. Severity: ${res.complaint.severity}.`;
-      banner.classList.remove('hidden');
-
-      showToast(`Violation logged at ${formatTimeOnly(res.complaint.createdAt)}`, 'success');
-
-      document.getElementById('complaint-form').reset();
-      document.getElementById('input-student-id').value = '';
-      sevInput.value = '';
-      state.selectedSeverity = '';
-      document.querySelectorAll('.sev-btn').forEach((b) => {
-        b.classList.remove('selected');
-        b.setAttribute('aria-checked', 'false');
-      });
-      document.getElementById('char-counter').textContent = '0 chars';
-
-      await refreshViolationsModule();
-      await updateHomeStats();
-      setTimeout(() => banner.classList.add('hidden'), 8000);
-    } catch (err) {
-      showToast(err.message || 'Error saving violation.', 'error');
+    let studentId = studentIdInput.value.trim();
+    if (studentId) {
+      const matched = roster.find((s) => s.id === studentId);
+      if (matched && window.AppStorage.normalizeClassId(matched.classId || matched.className) === cid) {
+        await executeViolationSave({ resolvedStudentId: matched.id, allowCreateCustom: false });
+        return;
+      }
+      // Revalidate failure: selected ID does not match chosen class
+      studentIdInput.value = '';
+      studentId = '';
+      await updateViolationMatchStatus();
     }
+
+    const sameClassMatches = roster.filter((s) =>
+      window.AppStorage.normalizeText(s.name).toLowerCase() === normLower &&
+      window.AppStorage.normalizeClassId(s.classId || s.className) === cid
+    );
+
+    if (sameClassMatches.length > 1) {
+      const errorBanner = document.getElementById('form-error-banner');
+      const msg = `Multiple students named "${cleanName}" exist in ${window.AppStorage.getClassLabel(cid)}. Please select the exact student from the suggestions list.`;
+      if (errorBanner) {
+        document.getElementById('error-banner-details').textContent = msg;
+        errorBanner.classList.remove('hidden');
+      }
+      showToast(msg, 'error');
+      nameInput.focus();
+      return;
+    }
+
+    if (sameClassMatches.length === 1) {
+      const stu = sameClassMatches[0];
+      openConfirmDialog({
+        title: 'Confirm Student Attribution',
+        message: 'Log this violation for the matched student in the selected class?',
+        detailsHtml: `
+          <div class="confirm-details-row"><span>Student</span><strong>${escapeHTML(stu.name)}</strong></div>
+          <div class="confirm-details-row"><span>Class &amp; Roll</span><strong>${escapeHTML(window.AppStorage.getClassLabel(stu.classId))} (#${escapeHTML(stu.rollNumber || '-')})</strong></div>
+          <div class="confirm-details-row"><span>Section</span><strong>${escapeHTML(stu.section || '-')}</strong></div>
+        `,
+        confirmLabel: 'Confirm & Submit',
+        confirmBtnClass: 'btn-primary',
+        onConfirm: async () => {
+          document.getElementById('input-student-id').value = stu.id;
+          await updateViolationMatchStatus();
+          await executeViolationSave({ resolvedStudentId: stu.id, allowCreateCustom: false });
+        }
+      });
+      return;
+    }
+
+    const otherClassMatches = roster.filter((s) =>
+      window.AppStorage.normalizeText(s.name).toLowerCase() === normLower &&
+      window.AppStorage.normalizeClassId(s.classId || s.className) !== cid
+    );
+
+    if (otherClassMatches.length > 0) {
+      const existingClasses = otherClassMatches.map((s) => `${window.AppStorage.getClassLabel(s.classId || s.className)} (#${s.rollNumber || '-'})`).join(', ');
+      openConfirmDialog({
+        title: 'Student Exists in Another Class',
+        message: `"${cleanName}" is enrolled in ${existingClasses}, not ${window.AppStorage.getClassLabel(cid)}. Choose Cancel to pick the existing student or proceed to create a new custom student record in ${window.AppStorage.getClassLabel(cid)}.`,
+        detailsHtml: `
+          <div class="confirm-details-row"><span>Entered Name</span><strong>${escapeHTML(cleanName)}</strong></div>
+          <div class="confirm-details-row"><span>Selected Class</span><strong>${escapeHTML(window.AppStorage.getClassLabel(cid))}</strong></div>
+          <div class="confirm-details-row"><span>Existing Roster Match</span><strong>${escapeHTML(existingClasses)}</strong></div>
+        `,
+        confirmLabel: 'Create Custom Record & Submit',
+        confirmBtnClass: 'btn-primary',
+        onConfirm: () => executeViolationSave({ resolvedStudentId: null, allowCreateCustom: true })
+      });
+      return;
+    }
+
+    openConfirmDialog({
+      title: 'Create New Custom Student?',
+      message: `"${cleanName}" was not found in the ${window.AppStorage.getClassLabel(cid)} roster. Confirm creating a new custom student record and logging this violation?`,
+      detailsHtml: `
+        <div class="confirm-details-row"><span>Student Name</span><strong>${escapeHTML(cleanName)}</strong></div>
+        <div class="confirm-details-row"><span>Class</span><strong>${escapeHTML(window.AppStorage.getClassLabel(cid))}</strong></div>
+        <div class="confirm-details-row"><span>Severity</span><strong>${escapeHTML(sevInput.value)}</strong></div>
+      `,
+      confirmLabel: 'Create & Submit Violation',
+      confirmBtnClass: 'btn-primary',
+      onConfirm: () => executeViolationSave({ resolvedStudentId: null, allowCreateCustom: true })
+    });
   }
 
   function getClassOrderIndex(classId) {
@@ -376,7 +608,7 @@
     grid.innerHTML = students.map((s) => {
       const chips = Object.entries(s.severityCounts)
         .filter(([_, c]) => c > 0)
-        .map(([sev, c]) => `<span class="sev-chip sev-chip-${sev.toLowerCase()}">${sev} &times; ${c}</span>`)
+        .map(([sev, c]) => `<span class="sev-chip sev-chip-${escapeHTML(sev.toLowerCase())}">${escapeHTML(sev)} &times; ${escapeHTML(c)}</span>`)
         .join('');
 
       return `
@@ -386,18 +618,18 @@
               <span class="student-name">${escapeHTML(s.name)}</span>
               <div><span class="student-class-badge">${escapeHTML(s.className)} ${s.rollNumber && s.rollNumber !== '-' ? '&bull; #' + escapeHTML(s.rollNumber) : ''}</span></div>
             </div>
-            <span class="complaint-count-badge">${s.totalComplaints} ${s.totalComplaints === 1 ? 'violation' : 'violations'}</span>
+            <span class="complaint-count-badge">${escapeHTML(s.totalComplaints)} ${s.totalComplaints === 1 ? 'violation' : 'violations'}</span>
           </div>
           <div class="meter-section">
-            <div class="meter-track"><div class="meter-fill-reveal" style="--meter-fill: ${s.fillPercent}%;"></div></div>
+            <div class="meter-track"><div class="meter-fill-reveal" style="--meter-fill: ${escapeHTML(s.fillPercent)}%;"></div></div>
             <div class="meter-info">
-              <span class="meter-score">Score: ${s.severityScore} <span>/ ${window.AppStorage.MAX_SCORE}</span></span>
-              <span class="status-badge ${s.statusClass}">${s.statusLabel}</span>
+              <span class="meter-score">Score: ${escapeHTML(s.severityScore)} <span>/ ${escapeHTML(window.AppStorage.MAX_SCORE)}</span></span>
+              <span class="status-badge ${escapeHTML(s.statusClass)}">${escapeHTML(s.statusLabel)}</span>
             </div>
           </div>
           <div class="severity-chips">${chips}</div>
           <div class="student-card-footer">
-            <span class="latest-time">${formatDateTime(s.latestComplaintAt)}</span>
+            <span class="latest-time">${escapeHTML(formatDateTime(s.latestComplaintAt))}</span>
             <span class="tap-indicator">Tap to view &rarr;</span>
           </div>
         </article>
@@ -419,18 +651,18 @@
     document.getElementById('modal-student-meta').textContent = `${s.className} • ${s.totalComplaints} violations • Score: ${s.severityScore}`;
 
     document.getElementById('modal-meter-section').innerHTML = `
-      <div class="meter-track" style="height:14px;"><div class="meter-fill-reveal" style="--meter-fill:${s.fillPercent}%;"></div></div>
+      <div class="meter-track" style="height:14px;"><div class="meter-fill-reveal" style="--meter-fill:${escapeHTML(s.fillPercent)}%;"></div></div>
       <div class="meter-info" style="margin-top:6px;">
-        <span class="meter-score">Severity Score: ${s.severityScore} <span>/ ${window.AppStorage.MAX_SCORE}</span></span>
-        <span class="status-badge ${s.statusClass}">${s.statusLabel}</span>
+        <span class="meter-score">Severity Score: ${escapeHTML(s.severityScore)} <span>/ ${escapeHTML(window.AppStorage.MAX_SCORE)}</span></span>
+        <span class="status-badge ${escapeHTML(s.statusClass)}">${escapeHTML(s.statusLabel)}</span>
       </div>
     `;
 
     document.getElementById('modal-history-list').innerHTML = s.complaints.map((c) => `
       <div class="history-card">
         <div class="history-card-header">
-          <span class="sev-chip sev-chip-${c.severity.toLowerCase()}">${escapeHTML(c.severity)}</span>
-          <span class="history-time">${formatDateTime(c.createdAt)}</span>
+          <span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span>
+          <span class="history-time">${escapeHTML(formatDateTime(c.createdAt))}</span>
         </div>
         <div class="history-text" dir="auto">${escapeHTML(c.text)}</div>
         <div class="history-footer">
@@ -439,12 +671,13 @@
       </div>
     `).join('');
 
-    document.getElementById('btn-detail-add-complaint').onclick = () => {
+    document.getElementById('btn-detail-add-complaint').onclick = async () => {
       closeViolationDetailModal();
       switchViolationSubTab('form');
       document.getElementById('input-student-id').value = s.id;
       document.getElementById('input-student-name').value = s.name;
       document.getElementById('select-class').value = window.AppStorage.normalizeClassId(s.classId);
+      await updateViolationMatchStatus();
       document.getElementById('textarea-complaint').focus();
     };
 
@@ -463,13 +696,17 @@
           message: 'Delete this violation record? If it is the student’s last violation, they will be cleared from the active violations list.',
           confirmLabel: 'Delete',
           onConfirm: async () => {
-            const res = await window.AppStorage.deleteComplaint(cid);
-            if (res.success) {
-              showToast('Violation deleted.', 'success');
-              if (res.studentDeleted) closeViolationDetailModal();
-              else openViolationDetailModal(studentId);
-              await refreshViolationsModule();
-              await updateHomeStats();
+            try {
+              const res = await window.AppStorage.deleteComplaint(cid);
+              if (res.success) {
+                showToast('Violation deleted.', 'success');
+                if (res.studentDeleted) closeViolationDetailModal();
+                else openViolationDetailModal(studentId);
+                await refreshViolationsModule();
+                await updateHomeStats();
+              }
+            } catch (err) {
+              showToast(err.message || 'Unable to delete violation.', 'error');
             }
           }
         });
@@ -516,7 +753,7 @@
       sorted.forEach((s) => {
         rowsHtml += `
           <tr class="student-group-row">
-            <td colspan="7"><strong>${escapeHTML(s.name)}</strong> (${escapeHTML(s.className)}) — ${s.totalComplaints} violations | Score: ${s.severityScore}/${window.AppStorage.MAX_SCORE} (${s.statusLabel})</td>
+            <td colspan="7"><strong>${escapeHTML(s.name)}</strong> (${escapeHTML(s.className)}) — ${escapeHTML(s.totalComplaints)} violations | Score: ${escapeHTML(s.severityScore)}/${escapeHTML(window.AppStorage.MAX_SCORE)} (${escapeHTML(s.statusLabel)})</td>
           </tr>
         `;
         s.complaints.forEach((c) => {
@@ -526,9 +763,9 @@
               <td><strong>${escapeHTML(s.name)}</strong></td>
               <td>${escapeHTML(s.className)}</td>
               <td class="complaint-cell" dir="auto">${escapeHTML(c.text)}</td>
-              <td><span class="sev-chip sev-chip-${c.severity.toLowerCase()}">${escapeHTML(c.severity)}</span></td>
-              <td>${formatDateOnly(c.createdAt)}</td>
-              <td>${formatTimeOnly(c.createdAt)}</td>
+              <td><span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span></td>
+              <td>${escapeHTML(formatDateOnly(c.createdAt))}</td>
+              <td>${escapeHTML(formatTimeOnly(c.createdAt))}</td>
             </tr>
           `;
         });
@@ -548,9 +785,9 @@
             <td><strong>${escapeHTML(s.name)}</strong></td>
             <td>${escapeHTML(window.AppStorage.getClassLabel(s.classId))}</td>
             <td class="complaint-cell" dir="auto">${escapeHTML(c.text)}</td>
-            <td><span class="sev-chip sev-chip-${c.severity.toLowerCase()}">${escapeHTML(c.severity)}</span></td>
-            <td>${formatDateOnly(c.createdAt)}</td>
-            <td>${formatTimeOnly(c.createdAt)}</td>
+            <td><span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span></td>
+            <td>${escapeHTML(formatDateOnly(c.createdAt))}</td>
+            <td>${escapeHTML(formatTimeOnly(c.createdAt))}</td>
           </tr>
         `;
       });
@@ -594,10 +831,20 @@
 
   function toggleHwFormDrawer(forceState = null, prefillClass = null, prefillSubject = null) {
     state.hwFormOpen = forceState !== null ? forceState : !state.hwFormOpen;
+    if (!state.hwFormOpen || forceState === true) {
+      state.hwEditingId = null;
+    }
+
     const drawer = document.getElementById('hw-form-drawer');
     const pill = document.getElementById('hw-toggle-pill');
+    const backBtn = document.getElementById('hw-btn-back-edit');
+    const saveBtn = document.getElementById('hw-btn-save-all');
+
     drawer.style.display = state.hwFormOpen ? 'block' : 'none';
     pill.innerHTML = state.hwFormOpen ? 'Close Form &#9652;' : 'Open Form &#9662;';
+
+    if (backBtn) backBtn.innerHTML = '&larr; Edit Form';
+    if (saveBtn) saveBtn.textContent = 'Save Homework & Student Marks';
 
     if (state.hwFormOpen) {
       document.getElementById('hw-create-form').style.display = 'block';
@@ -610,8 +857,65 @@
     }
   }
 
+  async function openHwEditChecklist(hw) {
+    if (!hw) return;
+    state.hwFormOpen = true;
+    state.hwEditingId = hw.id;
+    state.hwDraftMeta = {
+      classId: hw.classId,
+      subject: hw.subject,
+      teacherName: hw.teacherName,
+      description: hw.description,
+      createdAt: hw.createdAt,
+      dayName: hw.dayName
+    };
+
+    const students = await window.AppStorage.getStudentsByClass(hw.classId);
+    const existingRecords = hw.records || {};
+    state.hwDraftMarks = {};
+
+    students.forEach((s) => {
+      const prev = existingRecords[s.id];
+      if (prev) {
+        state.hwDraftMarks[s.id] = {
+          hwDone: !!prev.hwDone,
+          conceptClear: !!prev.conceptClear,
+          conceptResolved: !!prev.conceptResolved,
+          resolvedAt: prev.resolvedAt || null
+        };
+      } else {
+        state.hwDraftMarks[s.id] = {
+          hwDone: true,
+          conceptClear: true,
+          conceptResolved: false,
+          resolvedAt: null
+        };
+      }
+    });
+
+    const drawer = document.getElementById('hw-form-drawer');
+    const pill = document.getElementById('hw-toggle-pill');
+    const backBtn = document.getElementById('hw-btn-back-edit');
+    const saveBtn = document.getElementById('hw-btn-save-all');
+
+    drawer.style.display = 'block';
+    pill.innerHTML = 'Close Form &#9652;';
+    document.getElementById('hw-create-form').style.display = 'none';
+    document.getElementById('hw-marking-panel').style.display = 'block';
+    document.getElementById('hw-marking-title').textContent =
+      `Edit Saved Checklist — ${window.AppStorage.getClassLabel(hw.classId)} (${hw.subject})`;
+    document.getElementById('hw-marking-subtitle').textContent =
+      `Teacher: ${hw.teacherName} • Assigned: ${hw.dayName}, ${formatDateTime(hw.createdAt)} • "${hw.description}"`;
+    if (backBtn) backBtn.textContent = 'Cancel Edit';
+    if (saveBtn) saveBtn.textContent = 'Update Saved Checklist';
+
+    renderHwDraftRows(students);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   async function handleHwFormProceed(e) {
     e.preventDefault();
+    state.hwEditingId = null;
     const classId = document.getElementById('hw-select-class').value;
     const subject = document.getElementById('hw-select-subject').value;
     const teacherName = document.getElementById('hw-input-teacher').value.trim();
@@ -626,11 +930,13 @@
     // Default each student to hwDone: true, conceptClear: true (teachers can flip any student with 1 tap)
     state.hwDraftMarks = {};
     students.forEach((s) => {
-      state.hwDraftMarks[s.id] = { hwDone: true, conceptClear: true };
+      state.hwDraftMarks[s.id] = { hwDone: true, conceptClear: true, conceptResolved: false };
     });
 
     document.getElementById('hw-create-form').style.display = 'none';
     document.getElementById('hw-marking-panel').style.display = 'block';
+    document.getElementById('hw-btn-back-edit').innerHTML = '&larr; Edit Form';
+    document.getElementById('hw-btn-save-all').textContent = 'Save Homework & Student Marks';
     document.getElementById('hw-marking-title').textContent =
       `Mark ${students.length} Students — ${window.AppStorage.getClassLabel(classId)} (${subject})`;
     document.getElementById('hw-marking-subtitle').textContent =
@@ -642,12 +948,15 @@
   function renderHwDraftRows(students) {
     const container = document.getElementById('hw-marking-rows');
     container.innerHTML = students.map((s) => {
-      const m = state.hwDraftMarks[s.id] || { hwDone: true, conceptClear: true };
+      const m = state.hwDraftMarks[s.id] || { hwDone: true, conceptClear: true, conceptResolved: false };
+      const resolvedTag = (!m.conceptClear && m.conceptResolved)
+        ? '<span class="hw-resolved-pill">&#10003; Cleared Later</span>'
+        : '';
       return `
         <div class="hw-student-mark-row" data-sid="${escapeHTML(s.id)}">
           <div class="hw-stu-info">
             <div>
-              <div class="hw-stu-name">${escapeHTML(s.name)}</div>
+              <div class="hw-stu-name">${escapeHTML(s.name)} ${resolvedTag}</div>
               <div class="hw-stu-meta">Roll #${escapeHTML(s.rollNumber)} &bull; ${escapeHTML(s.section)}</div>
             </div>
           </div>
@@ -670,10 +979,18 @@
       row.querySelectorAll('.mark-toggle-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
           const act = btn.dataset.action;
-          if (act === 'hw-done') state.hwDraftMarks[sid].hwDone = true;
-          else if (act === 'hw-cross') state.hwDraftMarks[sid].hwDone = false;
-          else if (act === 'concept-clear') state.hwDraftMarks[sid].conceptClear = true;
-          else if (act === 'concept-unclear') state.hwDraftMarks[sid].conceptClear = false;
+          const draft = state.hwDraftMarks[sid] || (state.hwDraftMarks[sid] = { hwDone: true, conceptClear: true, conceptResolved: false });
+          if (act === 'hw-done') draft.hwDone = true;
+          else if (act === 'hw-cross') draft.hwDone = false;
+          else if (act === 'concept-clear') {
+            draft.conceptClear = true;
+            draft.conceptResolved = false;
+            draft.resolvedAt = null;
+          } else if (act === 'concept-unclear') {
+            draft.conceptClear = false;
+            draft.conceptResolved = false;
+            draft.resolvedAt = null;
+          }
           renderHwDraftRows(students);
         });
       });
@@ -684,30 +1001,47 @@
     if (!state.hwDraftMeta) return;
     const records = {};
     Object.entries(state.hwDraftMarks).forEach(([sid, val]) => {
-      records[sid] = {
+      const rec = {
         hwDone: !!val.hwDone,
         conceptClear: !!val.conceptClear,
-        conceptResolved: false
+        conceptResolved: !val.conceptClear ? !!val.conceptResolved : false
       };
+      if (rec.conceptResolved && val.resolvedAt) {
+        rec.resolvedAt = val.resolvedAt;
+      }
+      records[sid] = rec;
     });
 
-    const hw = await window.AppStorage.addHomework({
-      ...state.hwDraftMeta,
-      records
-    });
+    try {
+      if (state.hwEditingId) {
+        await window.AppStorage.updateHomeworkRecords(state.hwEditingId, records);
+        const activeUnclear = Object.values(records).filter((r) => !r.conceptClear && !r.conceptResolved).length;
+        showToast(
+          `Checklist updated (assignment preserved). Active unclear tasks: ${activeUnclear}.`,
+          'success'
+        );
+      } else {
+        await window.AppStorage.addHomework({
+          ...state.hwDraftMeta,
+          records
+        });
+        const unclearCount = Object.values(records).filter((r) => !r.conceptClear).length;
+        showToast(
+          `Homework saved! ${unclearCount > 0 ? `${unclearCount} unclear task(s) added to Pending Tasks.` : 'All concepts clear.'}`,
+          'success'
+        );
+      }
 
-    const unclearCount = Object.values(records).filter((r) => !r.conceptClear).length;
-    showToast(
-      `Homework saved! ${unclearCount > 0 ? `${unclearCount} unclear task(s) added to Pending Tasks.` : 'All concepts clear.'}`,
-      'success'
-    );
-
-    document.getElementById('hw-create-form').reset();
-    state.hwDraftMeta = null;
-    state.hwDraftMarks = {};
-    toggleHwFormDrawer(false);
-    await refreshHomeworkModule();
-    await updateHomeStats();
+      document.getElementById('hw-create-form').reset();
+      state.hwEditingId = null;
+      state.hwDraftMeta = null;
+      state.hwDraftMarks = {};
+      toggleHwFormDrawer(false);
+      await refreshHomeworkModule();
+      await updateHomeStats();
+    } catch (err) {
+      showToast(err.message || 'Unable to save homework to browser storage. Your marks have been preserved.', 'error');
+    }
   }
 
   async function refreshHomeworkModule() {
@@ -758,14 +1092,14 @@
         const clsPending = pending.filter((p) => p.classId === c.id).length;
 
         cards.push(`
-          <div class="drill-box" data-class-id="${c.id}" tabindex="0" role="button">
+          <div class="drill-box" data-class-id="${escapeHTML(c.id)}" tabindex="0" role="button">
             <div class="drill-box-top">
               <div>
                 <div class="drill-box-title">${escapeHTML(c.label)}</div>
-                <div class="drill-box-sub">${stus.length} Students &bull; ${subjects.length} Subjects</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} Students &bull; ${escapeHTML(subjects.length)} Subjects</div>
               </div>
               <span class="drill-pill ${clsPending > 0 ? 'drill-pill-amber' : 'drill-pill-blue'}">
-                ${clsPending > 0 ? `${clsPending} Pending` : `${clsHwCount} HW`}
+                ${clsPending > 0 ? `${escapeHTML(clsPending)} Pending` : `${escapeHTML(clsHwCount)} HW`}
               </span>
             </div>
             <div class="drill-box-footer">
@@ -877,10 +1211,10 @@
               <div class="drill-box-title">${escapeHTML(s.name)}</div>
               <div class="drill-box-sub">Roll #${escapeHTML(s.rollNumber)} &bull; ${escapeHTML(s.section)}</div>
             </div>
-            <span class="drill-pill ${pillClass}">${pct}</span>
+            <span class="drill-pill ${pillClass}">${escapeHTML(pct)}</span>
           </div>
           <div class="drill-box-footer">
-            <span>${report && report.conceptUnclearActive > 0 ? `<strong style="color:#d97706;">${report.conceptUnclearActive} Pending Task(s)</strong>` : 'View Student Report'}</span>
+            <span>${report && report.conceptUnclearActive > 0 ? `<strong style="color:#d97706;">${escapeHTML(report.conceptUnclearActive)} Pending Task(s)</strong>` : 'View Student Report'}</span>
             <span>&rarr;</span>
           </div>
         </div>
@@ -890,7 +1224,7 @@
     const recentHwHtml = subjHws.length === 0 ? '' : `
       <div class="dossier-section-card" style="margin-top:20px;">
         <div class="dossier-section-title">
-          <span>Assigned Homeworks History (${subjHws.length})</span>
+          <span>Assigned Homeworks History (${escapeHTML(subjHws.length)})</span>
         </div>
         <div class="history-list">
           ${subjHws.map((h) => {
@@ -901,12 +1235,15 @@
               <div class="history-card">
                 <div class="history-card-header">
                   <strong>Teacher: ${escapeHTML(h.teacherName)}</strong>
-                  <span class="history-time">${escapeHTML(h.dayName)}, ${formatDateTime(h.createdAt)}</span>
+                  <span class="history-time">${escapeHTML(h.dayName)}, ${escapeHTML(formatDateTime(h.createdAt))}</span>
                 </div>
                 <div class="history-text" dir="auto">${escapeHTML(h.description)}</div>
-                <div class="history-footer" style="justify-content:space-between; align-items:center;">
-                  <span style="font-size:0.78rem; color:var(--text-muted);">Done: ${done}/${recs.length} &bull; Active Unclear: ${unclear}</span>
-                  <button class="btn btn-outline btn-sm btn-danger btn-del-hw" data-hwid="${escapeHTML(h.id)}">Delete</button>
+                <div class="history-footer" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <span style="font-size:0.78rem; color:var(--text-muted);">Done: ${escapeHTML(done)}/${escapeHTML(recs.length)} &bull; Active Unclear: ${escapeHTML(unclear)}</span>
+                  <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-outline btn-sm btn-edit-hw" data-hwid="${escapeHTML(h.id)}">Edit Checklist</button>
+                    <button type="button" class="btn btn-outline btn-sm btn-danger btn-del-hw" data-hwid="${escapeHTML(h.id)}">Delete</button>
+                  </div>
                 </div>
               </div>
             `;
@@ -941,6 +1278,13 @@
       card.addEventListener('click', () => openHwStudentReportModal(card.dataset.sid));
     });
 
+    content.querySelectorAll('.btn-edit-hw').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetHw = subjHws.find((h) => h.id === btn.dataset.hwid);
+        if (targetHw) openHwEditChecklist(targetHw);
+      });
+    });
+
     content.querySelectorAll('.btn-del-hw').forEach((btn) => {
       btn.addEventListener('click', () => {
         const hwid = btn.dataset.hwid;
@@ -949,10 +1293,14 @@
           message: 'Delete this homework record and its student marks?',
           confirmLabel: 'Delete',
           onConfirm: async () => {
-            await window.AppStorage.deleteHomework(hwid);
-            showToast('Homework entry deleted.', 'success');
-            await refreshHomeworkModule();
-            await updateHomeStats();
+            try {
+              await window.AppStorage.deleteHomework(hwid);
+              showToast('Homework entry deleted.', 'success');
+              await refreshHomeworkModule();
+              await updateHomeStats();
+            } catch (err) {
+              showToast(err.message || 'Unable to delete homework.', 'error');
+            }
           }
         });
       });
@@ -999,7 +1347,7 @@
             <div class="pending-task-card">
               <div class="pending-top">
                 <div>
-                  <strong>${escapeHTML(pt.subject)}</strong> &bull; <small>${formatDateOnly(pt.createdAt)} (${pt.dayName})</small>
+                  <strong>${escapeHTML(pt.subject)}</strong> &bull; <small>${escapeHTML(formatDateOnly(pt.createdAt))} (${escapeHTML(pt.dayName)})</small>
                   <div style="font-size:0.82rem; color:var(--text-muted);">Teacher: ${escapeHTML(pt.teacherName)}</div>
                 </div>
                 <button type="button" class="btn btn-success btn-sm btn-resolve-modal-pt" data-hwid="${escapeHTML(pt.homeworkId)}">&#10003; Mark Cleared</button>
@@ -1015,7 +1363,7 @@
           ${report.entries.map((e) => `
             <div class="history-card">
               <div class="history-card-header">
-                <strong>${escapeHTML(e.dayName)}, ${formatDateTime(e.createdAt)}</strong>
+                <strong>${escapeHTML(e.dayName)}, ${escapeHTML(formatDateTime(e.createdAt))}</strong>
                 <div style="display:flex; gap:6px;">
                   <span class="drill-pill ${e.hwDone ? 'drill-pill-green' : 'drill-pill-red'}">${e.hwDone ? '&#10003; HW Done' : '&#10007; Not Done'}</span>
                   <span class="drill-pill ${e.conceptClear ? 'drill-pill-blue' : e.conceptResolved ? 'drill-pill-green' : 'drill-pill-amber'}">
@@ -1033,39 +1381,43 @@
       <div class="dossier-kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
         <div class="kpi-box">
           <div class="kpi-label">Homework Ratio</div>
-          <div class="kpi-value">${report.doneCount} / ${report.totalMarked}</div>
-          <div class="kpi-sub">${pctText} Completion</div>
+          <div class="kpi-value">${escapeHTML(report.doneCount)} / ${escapeHTML(report.totalMarked)}</div>
+          <div class="kpi-sub">${escapeHTML(pctText)} Completion</div>
         </div>
         <div class="kpi-box">
           <div class="kpi-label">HW Marking Score</div>
-          <div class="kpi-value" style="color:var(--primary);">${mark10Text}</div>
+          <div class="kpi-value" style="color:var(--primary);">${escapeHTML(mark10Text)}</div>
           <div class="kpi-sub">Based on period ratio</div>
         </div>
         <div class="kpi-box">
           <div class="kpi-label">Concept Status</div>
-          <div class="kpi-value">${report.conceptClearCount} Clear</div>
-          <div class="kpi-sub">${report.conceptUnclearActive} Unclear Pending</div>
+          <div class="kpi-value">${escapeHTML(report.conceptClearCount)} Clear</div>
+          <div class="kpi-sub">${escapeHTML(report.conceptUnclearActive)} Unclear Pending</div>
         </div>
       </div>
 
       <div>
-        <h4 style="font-size:0.95rem; font-weight:800; margin-bottom:8px;">Active Pending Tasks (${pendingList.length})</h4>
+        <h4 style="font-size:0.95rem; font-weight:800; margin-bottom:8px;">Active Pending Tasks (${escapeHTML(pendingList.length)})</h4>
         ${pendingHtml}
       </div>
 
       <div>
-        <h4 style="font-size:0.95rem; font-weight:800; margin-bottom:8px;">Homework Log (${report.entries.length})</h4>
+        <h4 style="font-size:0.95rem; font-weight:800; margin-bottom:8px;">Homework Log (${escapeHTML(report.entries.length)})</h4>
         ${historyHtml}
       </div>
     `;
 
     body.querySelectorAll('.btn-resolve-modal-pt').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await window.AppStorage.resolvePendingTask(btn.dataset.hwid, sid);
-        showToast('Concept marked as Cleared!', 'success');
-        await renderHwStudentReportBody();
-        await refreshHomeworkModule();
-        await updateHomeStats();
+        try {
+          await window.AppStorage.resolvePendingTask(btn.dataset.hwid, sid);
+          showToast('Concept marked as Cleared!', 'success');
+          await renderHwStudentReportBody();
+          await refreshHomeworkModule();
+          await updateHomeStats();
+        } catch (err) {
+          showToast(err.message || 'Unable to update task status.', 'error');
+        }
       });
     });
   }
@@ -1123,19 +1475,27 @@
 
     listEl.querySelectorAll('.btn-resolve-pt').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await window.AppStorage.resolvePendingTask(btn.dataset.hwid, btn.dataset.sid);
-        showToast('Pending concept task marked as Cleared!', 'success');
-        await refreshHomeworkModule();
-        await updateHomeStats();
+        try {
+          await window.AppStorage.resolvePendingTask(btn.dataset.hwid, btn.dataset.sid);
+          showToast('Pending concept task marked as Cleared!', 'success');
+          await refreshHomeworkModule();
+          await updateHomeStats();
+        } catch (err) {
+          showToast(err.message || 'Unable to resolve pending task.', 'error');
+        }
       });
     });
 
     listEl.querySelectorAll('.btn-reopen-pt').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await window.AppStorage.reopenPendingTask(btn.dataset.hwid, btn.dataset.sid);
-        showToast('Task moved back to Pending.', 'info');
-        await refreshHomeworkModule();
-        await updateHomeStats();
+        try {
+          await window.AppStorage.reopenPendingTask(btn.dataset.hwid, btn.dataset.sid);
+          showToast('Task moved back to Pending.', 'info');
+          await refreshHomeworkModule();
+          await updateHomeStats();
+        } catch (err) {
+          showToast(err.message || 'Unable to reopen pending task.', 'error');
+        }
       });
     });
   }
@@ -1153,7 +1513,7 @@
 
     const tests = await window.AppStorage.getTests();
     const activeTest = state.testId ? tests.find((t) => t.id === state.testId) : null;
-    if (state.testId && !activeTest) { state.testId = null; state.testClassId = null; state.testSubject = null; }
+    if (state.testId && !activeTest) { state.testId = null; state.testClassId = null; state.testSubject = null; state.testsDirty = false; }
 
     // Breadcrumb
     let bcHtml = `<button class="crumb-btn" id="test-bc-root">All Monthly Tests</button>`;
@@ -1174,14 +1534,21 @@
     }
     bc.innerHTML = bcHtml;
 
-    document.getElementById('test-bc-root').onclick = () => { state.testId = null; state.testClassId = null; state.testSubject = null; refreshTestsModule(); };
+    document.getElementById('test-bc-root').onclick = () => {
+      guardUnsavedTestMarks(() => { state.testId = null; state.testClassId = null; state.testSubject = null; refreshTestsModule(); });
+    };
     const bTest = document.getElementById('test-bc-test');
-    if (bTest) bTest.onclick = () => { state.testClassId = null; state.testSubject = null; refreshTestsModule(); };
+    if (bTest) bTest.onclick = () => {
+      guardUnsavedTestMarks(() => { state.testClassId = null; state.testSubject = null; refreshTestsModule(); });
+    };
     const bCls = document.getElementById('test-bc-class');
-    if (bCls) bCls.onclick = () => { state.testSubject = null; refreshTestsModule(); };
+    if (bCls) bCls.onclick = () => {
+      guardUnsavedTestMarks(() => { state.testSubject = null; refreshTestsModule(); });
+    };
 
     // LEVEL 0: Monthly Test Boxes List
     if (!activeTest) {
+      state.testsDirty = false;
       if (tests.length === 0) {
         content.innerHTML = `
           <div class="empty-state">
@@ -1201,13 +1568,13 @@
                 <div class="drill-box-top">
                   <div>
                     <div class="drill-box-title">${escapeHTML(t.name)}</div>
-                    <div class="drill-box-sub">Created: ${formatDateOnly(t.createdAt)} &bull; Default Max: ${t.defaultTotalMarks}</div>
+                    <div class="drill-box-sub">Created: ${escapeHTML(formatDateOnly(t.createdAt))} &bull; Default Max: ${escapeHTML(t.defaultTotalMarks)}</div>
                   </div>
-                  <span class="drill-pill drill-pill-green">${gradedSubjectsCount} Subjects Graded</span>
+                  <span class="drill-pill drill-pill-green">${escapeHTML(gradedSubjectsCount)} Subjects Graded</span>
                 </div>
                 <div class="drill-box-footer">
                   <span>Open Classes (6th–2nd Year) &rarr;</span>
-                  <button type="button" class="btn btn-outline btn-sm btn-danger btn-del-test" data-tid="${escapeHTML(t.id)}" onclick="event.stopPropagation();">Delete</button>
+                  <button type="button" class="btn btn-outline btn-sm btn-danger btn-del-test" data-tid="${escapeHTML(t.id)}">Delete</button>
                 </div>
               </div>
             `;
@@ -1220,6 +1587,7 @@
           state.testId = card.dataset.tid;
           state.testClassId = null;
           state.testSubject = null;
+          state.testsDirty = false;
           refreshTestsModule();
         });
       });
@@ -1233,10 +1601,14 @@
             message: 'Are you sure you want to delete this Monthly Test and all marks entered inside it?',
             confirmLabel: 'Delete Test',
             onConfirm: async () => {
-              await window.AppStorage.deleteTest(tid);
-              showToast('Monthly test deleted.', 'success');
-              await refreshTestsModule();
-              await updateHomeStats();
+              try {
+                await window.AppStorage.deleteTest(tid);
+                showToast('Monthly test deleted.', 'success');
+                await refreshTestsModule();
+                await updateHomeStats();
+              } catch (err) {
+                showToast(err.message || 'Unable to delete test.', 'error');
+              }
             }
           });
         });
@@ -1246,6 +1618,7 @@
 
     // LEVEL 1: Classes 6th to 12th (2nd Year) inside Selected Test
     if (!state.testClassId) {
+      state.testsDirty = false;
       const classes = window.AppStorage.getClasses();
       const cards = [];
       for (const c of classes) {
@@ -1256,13 +1629,13 @@
           gradedSubjs = Object.keys(activeTest.marks).filter((k) => k.startsWith(c.id + '|')).length;
         }
         cards.push(`
-          <div class="drill-box" data-cid="${c.id}" tabindex="0" role="button">
+          <div class="drill-box" data-cid="${escapeHTML(c.id)}" tabindex="0" role="button">
             <div class="drill-box-top">
               <div>
                 <div class="drill-box-title">${escapeHTML(c.label)}</div>
-                <div class="drill-box-sub">${stus.length} Students &bull; ${subjects.length} Subjects</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} Students &bull; ${escapeHTML(subjects.length)} Subjects</div>
               </div>
-              <span class="drill-pill ${gradedSubjs > 0 ? 'drill-pill-green' : ''}">${gradedSubjs} / ${subjects.length} Graded</span>
+              <span class="drill-pill ${gradedSubjs > 0 ? 'drill-pill-green' : ''}">${escapeHTML(gradedSubjs)} / ${escapeHTML(subjects.length)} Graded</span>
             </div>
             <div class="drill-box-footer">
               <span>Open Class Subjects &rarr;</span>
@@ -1276,6 +1649,7 @@
           state.testClassId = b.dataset.cid;
           state.testSubject = null;
           state.testSectionFilter = 'ALL';
+          state.testsDirty = false;
           refreshTestsModule();
         });
       });
@@ -1284,6 +1658,7 @@
 
     // LEVEL 2: Subjects inside Selected Class
     if (!state.testSubject) {
+      state.testsDirty = false;
       const subjects = await window.AppStorage.getSubjects(state.testClassId);
       const classStudents = await window.AppStorage.getStudentsByClass(state.testClassId);
 
@@ -1302,9 +1677,9 @@
                 <div class="drill-box-top">
                   <div>
                     <div class="drill-box-title">${escapeHTML(subj)}</div>
-                    <div class="drill-box-sub">Total Marks: ${totalMarks}</div>
+                    <div class="drill-box-sub">Total Marks: ${escapeHTML(totalMarks)}</div>
                   </div>
-                  <span class="drill-pill ${gradedCount > 0 ? 'drill-pill-green' : ''}">${gradedCount} / ${classStudents.length} Graded</span>
+                  <span class="drill-pill ${gradedCount > 0 ? 'drill-pill-green' : ''}">${escapeHTML(gradedCount)} / ${escapeHTML(classStudents.length)} Graded</span>
                 </div>
                 <div class="drill-box-footer">
                   <span>Enter Student Marks &rarr;</span>
@@ -1318,6 +1693,8 @@
       content.querySelectorAll('.drill-box').forEach((b) => {
         b.addEventListener('click', () => {
           state.testSubject = b.dataset.subject;
+          state.testSectionFilter = 'ALL';
+          state.testsDirty = false;
           refreshTestsModule();
         });
       });
@@ -1331,6 +1708,8 @@
     const existingTotal = (activeTest.subjectTotals && activeTest.subjectTotals[key]) || activeTest.defaultTotalMarks || 100;
     const existingDate = (activeTest.subjectDates && activeTest.subjectDates[key]) || new Date().toISOString().slice(0, 10);
 
+    state.testsDirty = false;
+
     const sections = Array.from(new Set(students.map((s) => s.section).filter(Boolean)));
     const filteredStudents = state.testSectionFilter === 'ALL'
       ? students
@@ -1339,7 +1718,7 @@
     let secPills = '';
     if (sections.length > 1) {
       secPills = `<div class="timeframe-pills" style="margin-bottom:12px;">
-        <button type="button" class="tf-pill ${state.testSectionFilter === 'ALL' ? 'active' : ''}" data-sec="ALL">All (${students.length})</button>
+        <button type="button" class="tf-pill ${state.testSectionFilter === 'ALL' ? 'active' : ''}" data-sec="ALL">All (${escapeHTML(students.length)})</button>
         ${sections.map((sec) => `<button type="button" class="tf-pill ${state.testSectionFilter === sec ? 'active' : ''}" data-sec="${escapeHTML(sec)}">${escapeHTML(sec)}</button>`).join('')}
       </div>`;
     }
@@ -1349,23 +1728,24 @@
         <div class="marks-sheet-header">
           <div>
             <h3 style="font-size:1.15rem; font-weight:800;">${escapeHTML(state.testSubject)} — ${escapeHTML(window.AppStorage.getClassLabel(state.testClassId))}</h3>
-            <p style="font-size:0.82rem; color:var(--text-muted);">${escapeHTML(activeTest.name)} &bull; Enter obtained marks for each student</p>
+            <p style="font-size:0.82rem; color:var(--text-muted);">${escapeHTML(activeTest.name)} &bull; Enter obtained marks (leave blank if ungraded; enter 0 for zero marks)</p>
           </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <div>
-              <label style="font-size:0.75rem; font-weight:700; display:block;">Total Marks</label>
-              <input type="number" id="input-subj-total-marks" class="input-control input-sm" value="${existingTotal}" min="1" style="width:95px;" />
+              <label style="font-size:0.75rem; font-weight:700; display:block;" for="input-subj-total-marks">Total Marks</label>
+              <input type="number" id="input-subj-total-marks" class="input-control input-sm" value="${escapeHTML(existingTotal)}" min="1" step="0.5" style="width:95px;" />
             </div>
             <div>
-              <label style="font-size:0.75rem; font-weight:700; display:block;">Test Date</label>
-              <input type="date" id="input-subj-test-date" class="input-control input-sm" value="${existingDate}" />
+              <label style="font-size:0.75rem; font-weight:700; display:block;" for="input-subj-test-date">Test Date</label>
+              <input type="date" id="input-subj-test-date" class="input-control input-sm" value="${escapeHTML(existingDate)}" />
             </div>
           </div>
         </div>
+        <div id="marks-validation-msg" class="marks-validation-msg" style="display:none;" role="alert"></div>
         ${secPills}
         <div id="marks-entry-list">
           ${filteredStudents.map((s) => {
-            const val = existingMarks[s.id] !== undefined && existingMarks[s.id] !== null ? existingMarks[s.id] : '';
+            const val = existingMarks[s.id] !== undefined && existingMarks[s.id] !== null && existingMarks[s.id] !== '' ? existingMarks[s.id] : '';
             const pct = val !== '' && existingTotal > 0 ? Math.round((Number(val) / existingTotal) * 100) : null;
             return `
               <div class="marks-entry-row">
@@ -1380,11 +1760,12 @@
                   inputmode="decimal"
                   class="marks-num-input"
                   data-sid="${escapeHTML(s.id)}"
-                  value="${val}"
+                  data-name="${escapeHTML(s.name)}"
+                  value="${escapeHTML(val)}"
                   placeholder="Marks"
                 />
                 <span class="drill-pill marks-pct-badge" id="pct-${escapeHTML(s.id)}" style="min-width:64px; text-align:center;">
-                  ${pct !== null ? `${pct}% (${getGradeLabel(pct)})` : '-'}
+                  ${pct !== null ? `${escapeHTML(pct)}% (${escapeHTML(getGradeLabel(pct))})` : '-'}
                 </span>
               </div>
             `;
@@ -1397,57 +1778,192 @@
     `;
 
     const totalInp = document.getElementById('input-subj-total-marks');
-    const updatePctBadges = () => {
-      const tot = Number(totalInp.value) || 100;
+    const dateInp = document.getElementById('input-subj-test-date');
+    const valMsgEl = document.getElementById('marks-validation-msg');
+
+    const validateAndRefreshBadges = () => {
+      const rawTot = totalInp.value.trim();
+      const tot = rawTot === '' ? NaN : Number(rawTot);
+      const totalValid = Number.isFinite(tot) && tot > 0;
+      let firstError = totalValid ? '' : 'Total Marks must be a positive number greater than 0.';
+
+      totalInp.classList.toggle('is-invalid', !totalValid);
+
       content.querySelectorAll('.marks-num-input').forEach((inp) => {
         const sid = inp.dataset.sid;
         const badge = document.getElementById(`pct-${sid}`);
-        if (inp.value === '') {
+        const raw = inp.value.trim();
+
+        inp.classList.remove('is-invalid');
+        if (raw === '') {
           badge.textContent = '-';
           badge.className = 'drill-pill marks-pct-badge';
+          return;
+        }
+
+        const num = Number(raw);
+        if (!totalValid || !Number.isFinite(num) || num < 0 || num > tot) {
+          inp.classList.add('is-invalid');
+          badge.textContent = 'Invalid';
+          badge.className = 'drill-pill marks-pct-badge drill-pill-red';
+          if (!firstError && totalValid) {
+            firstError = `Marks for ${inp.dataset.name || 'student'} must be between 0 and ${tot}.`;
+          }
         } else {
-          const pct = Math.round((Number(inp.value) / tot) * 100);
+          const pct = Math.round((num / tot) * 100);
           badge.textContent = `${pct}% (${getGradeLabel(pct)})`;
           badge.className = `drill-pill marks-pct-badge ${pct >= 50 ? 'drill-pill-green' : 'drill-pill-red'}`;
         }
       });
+
+      if (firstError) {
+        valMsgEl.textContent = firstError;
+        valMsgEl.style.display = 'block';
+      } else {
+        valMsgEl.textContent = '';
+        valMsgEl.style.display = 'none';
+      }
+
+      return { valid: !firstError, total: tot, error: firstError };
     };
 
-    totalInp.addEventListener('input', updatePctBadges);
+    totalInp.addEventListener('input', () => {
+      state.testsDirty = true;
+      validateAndRefreshBadges();
+    });
+    dateInp.addEventListener('change', () => {
+      state.testsDirty = true;
+    });
     content.querySelectorAll('.marks-num-input').forEach((inp) => {
-      inp.addEventListener('input', updatePctBadges);
+      inp.addEventListener('input', () => {
+        state.testsDirty = true;
+        validateAndRefreshBadges();
+      });
     });
 
     content.querySelectorAll('[data-sec]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.testSectionFilter = btn.dataset.sec;
-        refreshTestsModule();
+        if (btn.dataset.sec === state.testSectionFilter) return;
+        guardUnsavedTestMarks(() => {
+          state.testSectionFilter = btn.dataset.sec;
+          refreshTestsModule();
+        });
       });
     });
 
     document.getElementById('btn-save-subject-marks').onclick = async () => {
-      const total = Number(totalInp.value) || 100;
-      const dateVal = document.getElementById('input-subj-test-date').value;
+      const check = validateAndRefreshBadges();
+      if (!check.valid) {
+        showToast(check.error || 'Please fix invalid marks before saving.', 'error');
+        return;
+      }
+
+      const total = check.total;
+      const dateVal = dateInp.value;
       const mergedMarks = { ...existingMarks };
 
       content.querySelectorAll('.marks-num-input').forEach((inp) => {
         const sid = inp.dataset.sid;
-        if (inp.value === '') {
+        const raw = inp.value.trim();
+        if (raw === '') {
           delete mergedMarks[sid];
         } else {
-          mergedMarks[sid] = Number(inp.value);
+          mergedMarks[sid] = Number(raw); // 0 stays numeric 0, distinct from blank ''
         }
       });
 
-      await window.AppStorage.saveSubjectTestMarks(activeTest.id, state.testClassId, state.testSubject, total, mergedMarks, dateVal);
-      showToast(`Saved marks for ${state.testSubject} (${window.AppStorage.getClassLabel(state.testClassId)})!`, 'success');
-      refreshTestsModule();
+      try {
+        await window.AppStorage.saveSubjectTestMarks(activeTest.id, state.testClassId, state.testSubject, total, mergedMarks, dateVal);
+        state.testsDirty = false;
+        showToast(`Saved marks for ${state.testSubject} (${window.AppStorage.getClassLabel(state.testClassId)})!`, 'success');
+        refreshTestsModule();
+      } catch (err) {
+        showToast(err.message || 'Unable to save marks to browser storage. Unsaved edits remain on screen.', 'error');
+      }
     };
   }
 
   /* ========================================================================
      MODULE 4: Grand Report (Classes -> Students -> Complete Dossier)
      ======================================================================== */
+  async function renderGrandStudentResults() {
+    const pillsEl = document.getElementById('grand-section-pills');
+    const gridEl = document.getElementById('grand-students-grid');
+    if (!pillsEl || !gridEl || !state.grandClassId) return;
+
+    const students = await window.AppStorage.getStudentsByClass(state.grandClassId);
+    const allComplaints = await window.AppStorage.getComplaints();
+    const allPending = await window.AppStorage.getPendingTasks({ classId: state.grandClassId });
+
+    const sections = Array.from(new Set(students.map((s) => s.section).filter(Boolean)));
+    let filtered = state.grandSectionFilter === 'ALL'
+      ? students
+      : students.filter((s) => s.section === state.grandSectionFilter);
+
+    const q = state.grandSearch.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.rollNumber && s.rollNumber.toString().toLowerCase().includes(q)) ||
+        (s.family && s.family.toLowerCase().includes(q))
+      );
+    }
+
+    if (sections.length > 1) {
+      pillsEl.innerHTML = `<div class="timeframe-pills" style="margin-bottom:12px;">
+        <button type="button" class="tf-pill ${state.grandSectionFilter === 'ALL' ? 'active' : ''}" data-sec="ALL">All (${escapeHTML(students.length)})</button>
+        ${sections.map((sec) => `<button type="button" class="tf-pill ${state.grandSectionFilter === sec ? 'active' : ''}" data-sec="${escapeHTML(sec)}">${escapeHTML(sec)}</button>`).join('')}
+      </div>`;
+      pillsEl.querySelectorAll('[data-sec]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.grandSectionFilter = btn.dataset.sec;
+          renderGrandStudentResults();
+        });
+      });
+    } else {
+      pillsEl.innerHTML = '';
+    }
+
+    if (filtered.length === 0) {
+      gridEl.innerHTML = `
+        <div class="empty-state" style="grid-column:1 / -1;">
+          <h3>No Students Found</h3>
+          <p>No student matches "${escapeHTML(state.grandSearch.trim() || state.grandSectionFilter)}" in ${escapeHTML(window.AppStorage.getClassLabel(state.grandClassId))}.</p>
+        </div>
+      `;
+      return;
+    }
+
+    gridEl.innerHTML = filtered.map((s) => {
+      const vCount = allComplaints.filter((c) => c.studentId === s.id).length;
+      const pCount = allPending.filter((p) => p.studentId === s.id).length;
+      return `
+        <div class="drill-box grand-stu-card" data-sid="${escapeHTML(s.id)}" tabindex="0" role="button">
+          <div class="drill-box-top">
+            <div>
+              <div class="drill-box-title">${escapeHTML(s.name)}</div>
+              <div class="drill-box-sub">Roll #${escapeHTML(s.rollNumber)} &bull; ${escapeHTML(s.section)} &bull; S/O ${escapeHTML(s.family)}</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <span class="drill-pill ${vCount > 0 ? 'drill-pill-red' : 'drill-pill-green'}">${escapeHTML(vCount)} Violations</span>
+            <span class="drill-pill ${pCount > 0 ? 'drill-pill-amber' : 'drill-pill-blue'}">${escapeHTML(pCount)} Pending</span>
+          </div>
+          <div class="drill-box-footer">
+            <span>Open Full Grand Report &rarr;</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    gridEl.querySelectorAll('.grand-stu-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        state.grandStudentId = card.dataset.sid;
+        refreshGrandReportModule();
+      });
+    });
+  }
+
   async function refreshGrandReportModule() {
     const bc = document.getElementById('grand-breadcrumb');
     const content = document.getElementById('grand-drill-content');
@@ -1483,17 +1999,17 @@
         const clsPending = allPending.filter((p) => p.classId === c.id).length;
 
         cards.push(`
-          <div class="drill-box" data-cid="${c.id}" tabindex="0" role="button">
+          <div class="drill-box" data-cid="${escapeHTML(c.id)}" tabindex="0" role="button">
             <div class="drill-box-top">
               <div>
                 <div class="drill-box-title">${escapeHTML(c.label)}</div>
-                <div class="drill-box-sub">${stus.length} Active Students</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} Active Students</div>
               </div>
-              <span class="drill-pill drill-pill-blue">${c.badge || ''}</span>
+              <span class="drill-pill drill-pill-blue">${escapeHTML(c.badge || '')}</span>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <span class="drill-pill ${clsViolations > 0 ? 'drill-pill-red' : ''}">${clsViolations} Violations</span>
-              <span class="drill-pill ${clsPending > 0 ? 'drill-pill-amber' : ''}">${clsPending} Pending Tasks</span>
+              <span class="drill-pill ${clsViolations > 0 ? 'drill-pill-red' : ''}">${escapeHTML(clsViolations)} Violations</span>
+              <span class="drill-pill ${clsPending > 0 ? 'drill-pill-amber' : ''}">${escapeHTML(clsPending)} Pending Tasks</span>
             </div>
             <div class="drill-box-footer">
               <span>View Student List &rarr;</span>
@@ -1507,6 +2023,7 @@
           state.grandClassId = b.dataset.cid;
           state.grandStudentId = null;
           state.grandSearch = '';
+          state.grandSearchComposing = false;
           state.grandSectionFilter = 'ALL';
           refreshGrandReportModule();
         });
@@ -1514,89 +2031,43 @@
       return;
     }
 
-    // LEVEL 1: All Student Name Boxes of Selected Class
+    // LEVEL 1: All Student Name Boxes of Selected Class (Persistent Search Shell)
     if (!state.grandStudentId) {
-      const students = await window.AppStorage.getStudentsByClass(state.grandClassId);
-      const allComplaints = await window.AppStorage.getComplaints();
-      const allPending = await window.AppStorage.getPendingTasks({ classId: state.grandClassId });
+      const existingShell = document.getElementById('grand-level1-shell');
+      const needsMount = !existingShell || existingShell.dataset.classId !== String(state.grandClassId);
 
-      const sections = Array.from(new Set(students.map((s) => s.section).filter(Boolean)));
-      let filtered = state.grandSectionFilter === 'ALL'
-        ? students
-        : students.filter((s) => s.section === state.grandSectionFilter);
-
-      const q = state.grandSearch.trim().toLowerCase();
-      if (q) {
-        filtered = filtered.filter((s) =>
-          s.name.toLowerCase().includes(q) || (s.rollNumber && s.rollNumber.toString().includes(q)) || (s.family && s.family.toLowerCase().includes(q))
-        );
-      }
-
-      let secHtml = '';
-      if (sections.length > 1) {
-        secHtml = `<div class="timeframe-pills" style="margin-bottom:12px;">
-          <button type="button" class="tf-pill ${state.grandSectionFilter === 'ALL' ? 'active' : ''}" data-sec="ALL">All (${students.length})</button>
-          ${sections.map((sec) => `<button type="button" class="tf-pill ${state.grandSectionFilter === sec ? 'active' : ''}" data-sec="${escapeHTML(sec)}">${escapeHTML(sec)}</button>`).join('')}
-        </div>`;
-      }
-
-      const stuCards = filtered.map((s) => {
-        const vCount = allComplaints.filter((c) => c.studentId === s.id).length;
-        const pCount = allPending.filter((p) => p.studentId === s.id).length;
-        return `
-          <div class="drill-box grand-stu-card" data-sid="${escapeHTML(s.id)}" tabindex="0" role="button">
-            <div class="drill-box-top">
-              <div>
-                <div class="drill-box-title">${escapeHTML(s.name)}</div>
-                <div class="drill-box-sub">Roll #${escapeHTML(s.rollNumber)} &bull; ${escapeHTML(s.section)} &bull; S/O ${escapeHTML(s.family)}</div>
+      if (needsMount) {
+        content.innerHTML = `
+          <div id="grand-level1-shell" data-class-id="${escapeHTML(state.grandClassId)}">
+            <div style="margin-bottom:12px;">
+              <div class="search-box">
+                <span class="search-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <input type="search" id="grand-student-search" class="search-input" value="${escapeHTML(state.grandSearch)}" placeholder="Search student name, roll #, or father name..." autocomplete="off" />
               </div>
             </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <span class="drill-pill ${vCount > 0 ? 'drill-pill-red' : 'drill-pill-green'}">${vCount} Violations</span>
-              <span class="drill-pill ${pCount > 0 ? 'drill-pill-amber' : 'drill-pill-blue'}">${pCount} Pending</span>
-            </div>
-            <div class="drill-box-footer">
-              <span>Open Full Grand Report &rarr;</span>
-            </div>
+            <div id="grand-section-pills"></div>
+            <div id="grand-students-grid" class="drill-grid"></div>
           </div>
         `;
-      }).join('');
 
-      content.innerHTML = `
-        <div style="margin-bottom:12px;">
-          <div class="search-box">
-            <span class="search-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-            <input type="search" id="grand-student-search" class="search-input" value="${escapeHTML(state.grandSearch)}" placeholder="Search student name, roll #, or father name..." />
-          </div>
-        </div>
-        ${secHtml}
-        <div class="drill-grid">${stuCards}</div>
-      `;
-
-      const searchInp = document.getElementById('grand-student-search');
-      searchInp.addEventListener('input', (e) => {
-        state.grandSearch = e.target.value;
-        refreshGrandReportModule();
-        // Keep focus on search after re-render
-        setTimeout(() => {
-          const el = document.getElementById('grand-student-search');
-          if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
-        }, 0);
-      });
-
-      content.querySelectorAll('[data-sec]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          state.grandSectionFilter = btn.dataset.sec;
-          refreshGrandReportModule();
+        const searchInp = document.getElementById('grand-student-search');
+        searchInp.addEventListener('compositionstart', () => {
+          state.grandSearchComposing = true;
         });
-      });
-
-      content.querySelectorAll('.grand-stu-card').forEach((card) => {
-        card.addEventListener('click', () => {
-          state.grandStudentId = card.dataset.sid;
-          refreshGrandReportModule();
+        searchInp.addEventListener('compositionend', (e) => {
+          state.grandSearchComposing = false;
+          state.grandSearch = e.target.value;
+          renderGrandStudentResults();
         });
-      });
+        searchInp.addEventListener('input', (e) => {
+          state.grandSearch = e.target.value;
+          if (!state.grandSearchComposing) {
+            renderGrandStudentResults();
+          }
+        });
+      }
+
+      await renderGrandStudentResults();
       return;
     }
 
@@ -1647,8 +2118,8 @@
               </div>
             </div>
             <div class="dossier-actions no-print">
-              <button type="button" class="btn btn-outline btn-sm" onclick="window.print()">&#128424; Print Report</button>
-              ${waNumber ? `<a class="btn btn-success btn-sm" href="https://wa.me/${waNumber}?text=${waSummaryText}" target="_blank" rel="noopener">Share on WhatsApp</a>` : ''}
+              <button type="button" class="btn btn-outline btn-sm" id="btn-print-grand-report">&#128424; Print Report</button>
+              ${waNumber ? `<a class="btn btn-success btn-sm" href="https://wa.me/${escapeHTML(waNumber)}?text=${escapeHTML(waSummaryText)}" target="_blank" rel="noopener">Share on WhatsApp</a>` : ''}
             </div>
           </div>
           <div class="dossier-guardian-row">
@@ -1662,23 +2133,23 @@
         <div class="dossier-kpi-grid">
           <div class="kpi-box">
             <div class="kpi-label">Violation Score</div>
-            <div class="kpi-value">${viol.score} / ${window.AppStorage.MAX_SCORE}</div>
-            <div class="kpi-sub"><span class="status-badge ${viol.statusClass}">${viol.statusLabel}</span> (${viol.total} violations)</div>
+            <div class="kpi-value">${escapeHTML(viol.score)} / ${escapeHTML(window.AppStorage.MAX_SCORE)}</div>
+            <div class="kpi-sub"><span class="status-badge ${escapeHTML(viol.statusClass)}">${escapeHTML(viol.statusLabel)}</span> (${escapeHTML(viol.total)} violations)</div>
           </div>
           <div class="kpi-box">
             <div class="kpi-label">Homework Marking</div>
-            <div class="kpi-value" style="color:var(--primary);">${hwPct}</div>
-            <div class="kpi-sub">${hwRatio} Completed</div>
+            <div class="kpi-value" style="color:var(--primary);">${escapeHTML(hwPct)}</div>
+            <div class="kpi-sub">${escapeHTML(hwRatio)} Completed</div>
           </div>
           <div class="kpi-box">
             <div class="kpi-label">Pending Concepts</div>
-            <div class="kpi-value" style="color:${hw.activePendingTasks.length > 0 ? '#d97706' : '#059669'};">${hw.activePendingTasks.length}</div>
-            <div class="kpi-sub">${hw.resolvedTasks.length} cleared previously</div>
+            <div class="kpi-value" style="color:${hw.activePendingTasks.length > 0 ? '#d97706' : '#059669'};">${escapeHTML(hw.activePendingTasks.length)}</div>
+            <div class="kpi-sub">${escapeHTML(hw.resolvedTasks.length)} cleared previously</div>
           </div>
           <div class="kpi-box">
             <div class="kpi-label">Monthly Test Avg</div>
-            <div class="kpi-value" style="color:var(--emerald);">${testPct}</div>
-            <div class="kpi-sub">${tst.overallObtained} / ${tst.overallTotal} marks</div>
+            <div class="kpi-value" style="color:var(--emerald);">${escapeHTML(testPct)}</div>
+            <div class="kpi-sub">${escapeHTML(tst.overallObtained)} / ${escapeHTML(tst.overallTotal)} marks</div>
           </div>
         </div>
 
@@ -1710,9 +2181,9 @@
                       ${hw.subjectBreakdown.map((sb) => `
                         <tr>
                           <td><strong>${escapeHTML(sb.subject)}</strong></td>
-                          <td>${sb.doneCount} / ${sb.totalMarked}</td>
-                          <td><span class="drill-pill ${sb.percentage >= 75 ? 'drill-pill-green' : sb.percentage >= 50 ? 'drill-pill-amber' : 'drill-pill-red'}">${sb.percentage}%</span></td>
-                          <td>${sb.pendingCount > 0 ? `<span class="drill-pill drill-pill-amber">${sb.pendingCount} Unclear</span>` : 'All Clear'}</td>
+                          <td>${escapeHTML(sb.doneCount)} / ${escapeHTML(sb.totalMarked)}</td>
+                          <td><span class="drill-pill ${sb.percentage >= 75 ? 'drill-pill-green' : sb.percentage >= 50 ? 'drill-pill-amber' : 'drill-pill-red'}">${escapeHTML(sb.percentage)}%</span></td>
+                          <td>${sb.pendingCount > 0 ? `<span class="drill-pill drill-pill-amber">${escapeHTML(sb.pendingCount)} Unclear</span>` : 'All Clear'}</td>
                         </tr>
                       `).join('')}
                     </tbody>
@@ -1721,7 +2192,7 @@
               </div>`
           }
 
-          <h4 style="font-size:0.95rem; font-weight:800; margin-bottom:8px;">Active Pending Tasks (Unclear Concepts: ${hw.activePendingTasks.length})</h4>
+          <h4 style="font-size:0.95rem; font-weight:800; margin-bottom:8px;">Active Pending Tasks (Unclear Concepts: ${escapeHTML(hw.activePendingTasks.length)})</h4>
           ${hw.activePendingTasks.length === 0
             ? `<p style="font-size:0.85rem; color:var(--emerald); font-weight:600;">No pending unclear concepts!</p>`
             : `<div class="pending-tasks-list">
@@ -1729,7 +2200,7 @@
                   <div class="pending-task-card">
                     <div class="pending-top">
                       <div>
-                        <strong>${escapeHTML(pt.subject)}</strong> &bull; <small>${formatDateOnly(pt.createdAt)} (${pt.dayName})</small>
+                        <strong>${escapeHTML(pt.subject)}</strong> &bull; <small>${escapeHTML(formatDateOnly(pt.createdAt))} (${escapeHTML(pt.dayName)})</small>
                         <div style="font-size:0.8rem; color:var(--text-muted);">Teacher: ${escapeHTML(pt.teacherName)}</div>
                       </div>
                       <button type="button" class="btn btn-success btn-sm no-print btn-grand-resolve" data-hwid="${escapeHTML(pt.homeworkId)}">&#10003; Mark Cleared</button>
@@ -1744,7 +2215,7 @@
         <!-- 4. Section B: Monthly Test Results -->
         <div class="dossier-section-card">
           <div class="dossier-section-title">
-            <span>Monthly Test Results (${tst.tests.length} Tests)</span>
+            <span>Monthly Test Results (${escapeHTML(tst.tests.length)} Tests)</span>
           </div>
           ${tst.tests.length === 0
             ? `<p style="font-size:0.875rem; color:var(--text-muted);">No monthly test marks recorded for this student yet.</p>`
@@ -1752,7 +2223,7 @@
                 <div style="margin-bottom:16px;">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <strong style="font-size:0.95rem;">${escapeHTML(t.testName)}</strong>
-                    <span class="drill-pill drill-pill-blue">Total: ${t.testObtained} / ${t.testTotal} (${t.testPercent}% &bull; ${getGradeLabel(t.testPercent)})</span>
+                    <span class="drill-pill drill-pill-blue">Total: ${escapeHTML(t.testObtained)} / ${escapeHTML(t.testTotal)} (${escapeHTML(t.testPercent)}% &bull; ${escapeHTML(getGradeLabel(t.testPercent))})</span>
                   </div>
                   <div class="table-wrapper">
                     <div class="table-scroll-container">
@@ -1770,10 +2241,10 @@
                           ${t.subjectScores.map((sc) => `
                             <tr>
                               <td><strong>${escapeHTML(sc.subject)}</strong></td>
-                              <td>${sc.obtained}</td>
-                              <td>${sc.total}</td>
-                              <td>${sc.percent}%</td>
-                              <td><span class="drill-pill ${sc.percent >= 50 ? 'drill-pill-green' : 'drill-pill-red'}">${getGradeLabel(sc.percent)}</span></td>
+                              <td>${escapeHTML(sc.obtained)}</td>
+                              <td>${escapeHTML(sc.total)}</td>
+                              <td>${escapeHTML(sc.percent)}%</td>
+                              <td><span class="drill-pill ${sc.percent >= 50 ? 'drill-pill-green' : 'drill-pill-red'}">${escapeHTML(getGradeLabel(sc.percent))}</span></td>
                             </tr>
                           `).join('')}
                         </tbody>
@@ -1788,14 +2259,14 @@
         <!-- 5. Section C: Violation & Discipline History -->
         <div class="dossier-section-card">
           <div class="dossier-section-title">
-            <span>Violation &amp; Discipline Record (${viol.total})</span>
+            <span>Violation &amp; Discipline Record (${escapeHTML(viol.total)})</span>
             <button type="button" class="btn btn-outline btn-sm no-print" id="btn-grand-add-violation">+ Log Violation</button>
           </div>
           <div class="meter-section" style="margin-bottom:14px;">
-            <div class="meter-track"><div class="meter-fill-reveal" style="--meter-fill:${viol.fillPercent}%;"></div></div>
+            <div class="meter-track"><div class="meter-fill-reveal" style="--meter-fill:${escapeHTML(viol.fillPercent)}%;"></div></div>
             <div class="meter-info">
-              <span class="meter-score">Severity Score: ${viol.score} <span>/ ${window.AppStorage.MAX_SCORE}</span></span>
-              <span class="status-badge ${viol.statusClass}">${viol.statusLabel}</span>
+              <span class="meter-score">Severity Score: ${escapeHTML(viol.score)} <span>/ ${escapeHTML(window.AppStorage.MAX_SCORE)}</span></span>
+              <span class="status-badge ${escapeHTML(viol.statusClass)}">${escapeHTML(viol.statusLabel)}</span>
             </div>
           </div>
           ${viol.list.length === 0
@@ -1804,8 +2275,8 @@
                 ${viol.list.map((c) => `
                   <div class="history-card">
                     <div class="history-card-header">
-                      <span class="sev-chip sev-chip-${c.severity.toLowerCase()}">${escapeHTML(c.severity)}</span>
-                      <span class="history-time">${formatDateTime(c.createdAt)}</span>
+                      <span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span>
+                      <span class="history-time">${escapeHTML(formatDateTime(c.createdAt))}</span>
                     </div>
                     <div class="history-text" dir="auto">${escapeHTML(c.text)}</div>
                   </div>
@@ -1817,6 +2288,11 @@
       </div>
     `;
 
+    const printBtn = document.getElementById('btn-print-grand-report');
+    if (printBtn) {
+      printBtn.addEventListener('click', () => window.print());
+    }
+
     content.querySelectorAll('[data-grange]').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.grandHwRange = btn.dataset.grange;
@@ -1826,21 +2302,26 @@
 
     content.querySelectorAll('.btn-grand-resolve').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await window.AppStorage.resolvePendingTask(btn.dataset.hwid, s.id);
-        showToast('Pending concept task cleared!', 'success');
-        refreshGrandReportModule();
-        updateHomeStats();
+        try {
+          await window.AppStorage.resolvePendingTask(btn.dataset.hwid, s.id);
+          showToast('Pending concept task cleared!', 'success');
+          refreshGrandReportModule();
+          updateHomeStats();
+        } catch (err) {
+          showToast(err.message || 'Unable to resolve task.', 'error');
+        }
       });
     });
 
     const addViolBtn = document.getElementById('btn-grand-add-violation');
     if (addViolBtn) {
-      addViolBtn.onclick = () => {
+      addViolBtn.onclick = async () => {
         switchScreen('violations');
         switchViolationSubTab('form');
         document.getElementById('input-student-id').value = s.id;
         document.getElementById('input-student-name').value = s.name;
         document.getElementById('select-class').value = s.classId;
+        await updateViolationMatchStatus();
         document.getElementById('textarea-complaint').focus();
       };
     }
@@ -1873,21 +2354,67 @@
   }
 
   function handleFileImportSelected(e) {
-    const file = e.target.files && e.target.files[0];
+    const fileInput = e.target;
+    const file = fileInput.files && fileInput.files[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = async (ev) => {
+      const rawText = ev.target.result;
+      fileInput.value = '';
+
+      let json;
       try {
-        const json = JSON.parse(ev.target.result);
-        const res = await window.AppStorage.importJSON(json);
-        showToast(`Restored: ${res.complaintsCount} violations, ${res.homeworksCount} homeworks, ${res.testsCount} tests.`, 'success');
-        switchScreen(state.currentScreen);
-        updateHomeStats();
-      } catch (err) {
-        showToast('Invalid JSON backup file.', 'error');
-      } finally {
-        e.target.value = '';
+        json = JSON.parse(rawText);
+      } catch (parseErr) {
+        showToast('Invalid JSON syntax in backup file. Existing data unchanged.', 'error', 4500);
+        return;
       }
+
+      let validation;
+      try {
+        validation = await window.AppStorage.validateAndPreviewImportJSON(json);
+      } catch (valErr) {
+        showToast(valErr.message || 'Unsafe or invalid backup file. Existing data unchanged.', 'error', 5000);
+        return;
+      }
+
+      const p = validation.preview;
+      const detailsHtml = `
+        <div class="confirm-details-row"><span>Schema Version</span><strong>v${escapeHTML(p.version)}</strong></div>
+        <div class="confirm-details-row"><span>Exported</span><strong>${escapeHTML(p.exportedAt ? formatDateTime(p.exportedAt) : 'Unspecified')}</strong></div>
+        <div class="confirm-details-row"><span>Violation Records</span><strong>${escapeHTML(p.complaintsCount)}</strong></div>
+        <div class="confirm-details-row"><span>Homework Assignments</span><strong>${escapeHTML(p.homeworksCount)}</strong></div>
+        <div class="confirm-details-row"><span>Monthly Tests</span><strong>${escapeHTML(p.testsCount)}</strong></div>
+        <div class="confirm-details-row"><span>Custom Students</span><strong>${escapeHTML(p.customStudentsCount)}</strong></div>
+        <div class="confirm-details-row"><span>Custom Subjects</span><strong>${escapeHTML(p.customSubjectsCount)}</strong></div>
+      `;
+
+      openConfirmDialog({
+        title: 'Restore Backup? (Replaces Current Data)',
+        message: 'Validated backup ready. Restoring will replace all currently saved portal data in this browser (a temporary session recovery snapshot is saved automatically).',
+        detailsHtml,
+        confirmLabel: 'Replace & Restore',
+        confirmBtnClass: 'btn-primary',
+        onConfirm: async () => {
+          try {
+            const res = await window.AppStorage.importJSON(json);
+            showToast(
+              `Restored: ${res.complaintsCount} violations, ${res.homeworksCount} homeworks, ${res.testsCount} tests.`,
+              'success',
+              4500
+            );
+            switchScreen(state.currentScreen, true);
+            await updateHomeStats();
+          } catch (impErr) {
+            showToast(impErr.message || 'Backup import failed. Existing data preserved.', 'error', 5000);
+          }
+        }
+      });
+    };
+    reader.onerror = () => {
+      fileInput.value = '';
+      showToast('Failed to read the selected backup file.', 'error');
     };
     reader.readAsText(file);
   }
@@ -1939,10 +2466,13 @@
       document.getElementById('char-counter').textContent = `${e.target.value.length} chars`;
       document.getElementById('val-complaint').classList.remove('visible');
       e.target.classList.remove('is-invalid');
+      clearViolationBanners();
     });
-    document.getElementById('select-class').addEventListener('change', (e) => {
+    document.getElementById('select-class').addEventListener('change', async (e) => {
       document.getElementById('val-class').classList.remove('visible');
       e.target.classList.remove('is-invalid');
+      clearViolationBanners();
+      await updateViolationMatchStatus();
     });
     document.querySelectorAll('.sev-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1954,6 +2484,7 @@
           b.setAttribute('aria-checked', match ? 'true' : 'false');
         });
         document.getElementById('val-severity').classList.remove('visible');
+        clearViolationBanners();
       });
     });
     document.getElementById('complaint-form').addEventListener('submit', handleViolationSubmit);
@@ -1983,8 +2514,15 @@
     document.getElementById('hw-select-class').addEventListener('change', (e) => populateHwFormSubjects(e.target.value));
     document.getElementById('hw-create-form').addEventListener('submit', handleHwFormProceed);
     document.getElementById('hw-btn-back-edit').addEventListener('click', () => {
-      document.getElementById('hw-marking-panel').style.display = 'none';
-      document.getElementById('hw-create-form').style.display = 'block';
+      if (state.hwEditingId) {
+        state.hwEditingId = null;
+        state.hwDraftMeta = null;
+        state.hwDraftMarks = {};
+        toggleHwFormDrawer(false);
+      } else {
+        document.getElementById('hw-marking-panel').style.display = 'none';
+        document.getElementById('hw-create-form').style.display = 'block';
+      }
     });
     document.getElementById('hw-mark-all-done').addEventListener('click', async () => {
       Object.keys(state.hwDraftMarks).forEach((sid) => state.hwDraftMarks[sid].hwDone = true);
@@ -1992,7 +2530,11 @@
       renderHwDraftRows(stus);
     });
     document.getElementById('hw-mark-all-clear').addEventListener('click', async () => {
-      Object.keys(state.hwDraftMarks).forEach((sid) => state.hwDraftMarks[sid].conceptClear = true);
+      Object.keys(state.hwDraftMarks).forEach((sid) => {
+        state.hwDraftMarks[sid].conceptClear = true;
+        state.hwDraftMarks[sid].conceptResolved = false;
+        state.hwDraftMarks[sid].resolvedAt = null;
+      });
       const stus = await window.AppStorage.getStudentsByClass(state.hwDraftMeta.classId);
       renderHwDraftRows(stus);
     });
@@ -2040,27 +2582,45 @@
     document.getElementById('create-test-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = document.getElementById('input-new-test-name').value.trim();
-      const defTotal = document.getElementById('input-new-test-total').value;
+      const defTotalRaw = document.getElementById('input-new-test-total').value.trim();
+      const defTotalNum = defTotalRaw === '' ? 100 : Number(defTotalRaw);
       if (!name) { showToast('Please enter a test name.', 'error'); return; }
-      await window.AppStorage.createTest({ name, defaultTotalMarks: defTotal });
-      document.getElementById('create-test-form').reset();
-      document.getElementById('input-new-test-total').value = '100';
-      document.getElementById('create-test-form').style.display = 'none';
-      document.getElementById('btn-show-create-test').style.display = 'flex';
-      showToast(`Test box "${name}" created!`, 'success');
-      refreshTestsModule();
-      updateHomeStats();
+      if (!Number.isFinite(defTotalNum) || defTotalNum <= 0) {
+        showToast('Default Total Marks must be a finite number greater than 0.', 'error');
+        return;
+      }
+
+      try {
+        await window.AppStorage.createTest({ name, defaultTotalMarks: defTotalNum });
+        document.getElementById('create-test-form').reset();
+        document.getElementById('input-new-test-total').value = '100';
+        document.getElementById('create-test-form').style.display = 'none';
+        document.getElementById('btn-show-create-test').style.display = 'flex';
+        showToast(`Test box "${name}" created!`, 'success');
+        refreshTestsModule();
+        updateHomeStats();
+      } catch (err) {
+        showToast(err.message || 'Unable to create test.', 'error');
+      }
+    });
+
+    // Unsaved marks browser unload protection
+    window.addEventListener('beforeunload', (e) => {
+      if (hasUnsavedTestMarks()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     });
 
     // Confirmation Dialog
-    document.getElementById('btn-confirm-cancel').addEventListener('click', closeConfirmDialog);
+    document.getElementById('btn-confirm-cancel').addEventListener('click', () => closeConfirmDialog(true));
     document.getElementById('btn-confirm-proceed').addEventListener('click', async () => {
       const cb = state.confirmCallback;
-      closeConfirmDialog();
+      closeConfirmDialog(false);
       if (cb) await cb();
     });
     document.getElementById('confirm-modal').addEventListener('click', (e) => {
-      if (e.target.id === 'confirm-modal') closeConfirmDialog();
+      if (e.target.id === 'confirm-modal') closeConfirmDialog(true);
     });
   }
 
