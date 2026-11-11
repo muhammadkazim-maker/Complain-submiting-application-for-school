@@ -5,7 +5,7 @@
  * that could interrupt unsaved work.
  */
 
-const CACHE_NAME = 'hes-portal-v4';
+const CACHE_NAME = 'hes-portal-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

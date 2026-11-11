@@ -1,6 +1,6 @@
 /**
  * Hadi Education System Balkassar — Main Application Controller
- * Modules: Home Dashboard | Violation Record | Homework & Pending Tasks | Monthly Tests | Grand Report
+ * Modules: Home Dashboard | Violation Record | Homework & Pending Tasks | Classes Attendance | Prep Attendance | Monthly Tests | Grand Report
  */
 
 (function () {
@@ -32,6 +32,22 @@
     hwModalCustomStart: '',
     hwModalCustomEnd: '',
 
+    // Classes Attendance module
+    caClassId: null,
+    caSubject: null,
+    caDate: '',
+    caSectionFilter: 'ALL',
+    caDraftRecords: {}, // studentId -> 'Present' | 'Absent' | 'Leave'
+    caDirty: false,
+
+    // Prep Attendance module
+    paClassId: null,
+    paPrepSlot: null,
+    paDate: '',
+    paSectionFilter: 'ALL',
+    paDraftRecords: {}, // studentId -> 'Present' | 'Absent' | 'Leave'
+    paDirty: false,
+
     // Monthly Tests module
     testId: null,
     testClassId: null,
@@ -58,6 +74,8 @@
     home: { title: 'Home Dashboard', subtitle: 'Daily summary & quick academic workflows' },
     violations: { title: 'Violation Record', subtitle: 'Discipline logging, severity tracking & master register' },
     homework: { title: 'Homework & Pending Tasks', subtitle: 'Daily assignments, checklists & unclear concept clearance' },
+    'class-attendance': { title: 'Classes Attendance', subtitle: 'Classes 6th–12th subject-wise attendance roll call' },
+    'prep-attendance': { title: 'Prep Attendance', subtitle: 'Classes 6th–12th Prep 1, Prep 2 & Prep 3 attendance' },
     tests: { title: 'Monthly Tests', subtitle: 'Assessment boxes, class subjects & validated student marks' },
     'grand-report': { title: 'Grand Student Report', subtitle: 'Unified student dossier, print profile & guardian contact' }
   };
@@ -218,7 +236,15 @@
     return state.currentScreen === 'tests' && !!state.testId && !!state.testClassId && !!state.testSubject && !!state.testsDirty;
   }
 
-  function guardUnsavedTestMarks(proceedCallback) {
+  function hasUnsavedAttendance(mode = null) {
+    const classDirty = state.currentScreen === 'class-attendance' && !!state.caClassId && !!state.caSubject && !!state.caDirty;
+    const prepDirty = state.currentScreen === 'prep-attendance' && !!state.paClassId && !!state.paPrepSlot && !!state.paDirty;
+    if (mode === 'class') return classDirty;
+    if (mode === 'prep') return prepDirty;
+    return classDirty || prepDirty;
+  }
+
+  function guardUnsavedPortalEdits(proceedCallback, cancelCallback = null) {
     if (hasUnsavedTestMarks()) {
       openConfirmDialog({
         title: 'Unsaved Test Marks',
@@ -228,19 +254,39 @@
         onConfirm: () => {
           state.testsDirty = false;
           proceedCallback();
-        }
+        },
+        onCancel: cancelCallback
+      });
+      return;
+    }
+    if (hasUnsavedAttendance()) {
+      openConfirmDialog({
+        title: 'Unsaved Attendance Marks',
+        message: 'You have unsaved attendance marks for this session. Discard unsaved changes and continue?',
+        confirmLabel: 'Discard Changes',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: () => {
+          state.caDirty = false;
+          state.paDirty = false;
+          proceedCallback();
+        },
+        onCancel: cancelCallback
       });
       return;
     }
     proceedCallback();
   }
 
+  function guardUnsavedTestMarks(proceedCallback) {
+    guardUnsavedPortalEdits(proceedCallback);
+  }
+
   /* ========================================================================
      Navigation Controller
      ======================================================================== */
   function switchScreen(screenName, bypassDirtyCheck = false) {
-    if (!bypassDirtyCheck && screenName !== state.currentScreen && hasUnsavedTestMarks()) {
-      guardUnsavedTestMarks(() => switchScreen(screenName, true));
+    if (!bypassDirtyCheck && screenName !== state.currentScreen && (hasUnsavedTestMarks() || hasUnsavedAttendance())) {
+      guardUnsavedPortalEdits(() => switchScreen(screenName, true));
       return;
     }
 
@@ -274,6 +320,8 @@
     if (screenName === 'home') updateHomeStats();
     else if (screenName === 'violations') refreshViolationsModule();
     else if (screenName === 'homework') refreshHomeworkModule();
+    else if (screenName === 'class-attendance') refreshAttendanceModule('class');
+    else if (screenName === 'prep-attendance') refreshAttendanceModule('prep');
     else if (screenName === 'tests') refreshTestsModule();
     else if (screenName === 'grand-report') refreshGrandReportModule();
   }
@@ -287,11 +335,20 @@
     const pending = await window.AppStorage.getPendingTasks({ includeResolved: false });
     const tests = await window.AppStorage.getTests();
     const hws = await window.AppStorage.getHomeworks();
+    const classAttList = await window.AppStorage.getClassAttendance();
+    const prepAttList = await window.AppStorage.getPrepAttendance();
+    const todayStr = window.AppStorage.getLocalTodayDate();
+    const classAttToday = classAttList.filter((e) => e.date === todayStr).length;
+    const prepAttToday = prepAttList.filter((e) => e.date === todayStr).length;
 
     document.getElementById('home-stat-students').textContent = roster.length;
     document.getElementById('home-stat-violations').textContent = complaints.length;
     document.getElementById('home-stat-pending').textContent = pending.length;
     document.getElementById('home-stat-tests').textContent = tests.length;
+    const statClassAtt = document.getElementById('home-stat-class-att');
+    const statPrepAtt = document.getElementById('home-stat-prep-att');
+    if (statClassAtt) statClassAtt.textContent = classAttToday;
+    if (statPrepAtt) statPrepAtt.textContent = prepAttToday;
 
     const dateEl = document.getElementById('home-current-date');
     if (dateEl) {
@@ -306,15 +363,27 @@
     document.getElementById('home-violations-tag').textContent = `${complaints.length} Logged`;
     document.getElementById('home-homework-tag').textContent = `${hws.length} HW • ${pending.length} Pending`;
     document.getElementById('home-tests-tag').textContent = `${tests.length} ${tests.length === 1 ? 'Test' : 'Tests'}`;
+    const classAttTag = document.getElementById('home-class-att-tag');
+    if (classAttTag) classAttTag.textContent = `${classAttList.length} Saved ${classAttList.length === 1 ? 'Roll' : 'Rolls'}`;
+    const prepAttTag = document.getElementById('home-prep-att-tag');
+    if (prepAttTag) {
+      prepAttTag.textContent = prepAttList.length > 0
+        ? `${prepAttList.length} Saved • Prep 1–3`
+        : 'Prep 1 • 2 • 3';
+    }
     const stuTag = document.getElementById('home-students-tag');
     if (stuTag) stuTag.textContent = `${roster.length} Student Profiles`;
 
     const badgeViol = document.getElementById('snav-badge-violations');
     const badgePend = document.getElementById('snav-badge-pending');
     const badgeTests = document.getElementById('snav-badge-tests');
+    const badgeClassAtt = document.getElementById('snav-badge-class-att');
+    const badgePrepAtt = document.getElementById('snav-badge-prep-att');
     if (badgeViol) badgeViol.textContent = complaints.length;
     if (badgePend) badgePend.textContent = pending.length;
     if (badgeTests) badgeTests.textContent = tests.length;
+    if (badgeClassAtt) badgeClassAtt.textContent = classAttToday;
+    if (badgePrepAtt) badgePrepAtt.textContent = prepAttToday;
 
     const recoverBtn = document.getElementById('btn-restore-recovery');
     if (recoverBtn) {
@@ -1654,6 +1723,506 @@
   }
 
   /* ========================================================================
+     MODULE 2B & 2C: Shared Classes Attendance & Prep Attendance Engine
+     ======================================================================== */
+  const ATTENDANCE_MODES = {
+    class: {
+      screen: 'class-attendance',
+      prefix: 'ca',
+      title: 'Classes Attendance',
+      breadcrumbElId: 'ca-breadcrumb',
+      contentElId: 'ca-drill-content',
+      classKey: 'caClassId',
+      itemKey: 'caSubject',
+      dateKey: 'caDate',
+      secKey: 'caSectionFilter',
+      draftKey: 'caDraftRecords',
+      dirtyKey: 'caDirty',
+      itemField: 'subject',
+      itemPluralLabel: 'Subjects',
+      level1Prompt: 'Open Class Subjects',
+      getSessions: (filter) => window.AppStorage.getClassAttendance(filter),
+      saveSession: (payload) => window.AppStorage.saveClassAttendance(payload),
+      getLevel1Items: async (classId) => window.AppStorage.getSubjects(classId)
+    },
+    prep: {
+      screen: 'prep-attendance',
+      prefix: 'pa',
+      title: 'Prep Attendance',
+      breadcrumbElId: 'pa-breadcrumb',
+      contentElId: 'pa-drill-content',
+      classKey: 'paClassId',
+      itemKey: 'paPrepSlot',
+      dateKey: 'paDate',
+      secKey: 'paSectionFilter',
+      draftKey: 'paDraftRecords',
+      dirtyKey: 'paDirty',
+      itemField: 'prepSlot',
+      itemPluralLabel: '3 Prep Boxes',
+      level1Prompt: 'Open Prep 1–3',
+      getSessions: (filter) => window.AppStorage.getPrepAttendance(filter),
+      saveSession: (payload) => window.AppStorage.savePrepAttendance(payload),
+      getLevel1Items: async () => [...window.AppStorage.PREP_SLOTS]
+    }
+  };
+
+  function summarizeAttendanceDraft(students, draft) {
+    let present = 0;
+    let absent = 0;
+    let leave = 0;
+    students.forEach((s) => {
+      const st = draft[s.id];
+      if (st === 'Present') present++;
+      else if (st === 'Absent') absent++;
+      else if (st === 'Leave') leave++;
+    });
+    const marked = present + absent + leave;
+    return {
+      total: students.length,
+      marked,
+      unmarked: Math.max(0, students.length - marked),
+      present,
+      absent,
+      leave
+    };
+  }
+
+  function syncAttendanceDraftDom(mode, allStudents, visibleStudents, savedSession) {
+    const cfg = ATTENDANCE_MODES[mode];
+    const draft = state[cfg.draftKey] || {};
+    const countsAll = summarizeAttendanceDraft(allStudents, draft);
+    const countsVis = summarizeAttendanceDraft(visibleStudents, draft);
+
+    const listEl = document.getElementById(`${cfg.prefix}-rows-list`);
+    if (listEl) {
+      listEl.querySelectorAll('.att-student-row').forEach((row) => {
+        const sid = row.dataset.sid;
+        const st = draft[sid] || '';
+        row.classList.toggle('att-row-present', st === 'Present');
+        row.classList.toggle('att-row-absent', st === 'Absent');
+        row.classList.toggle('att-row-leave', st === 'Leave');
+
+        row.querySelectorAll('.att-status-btn').forEach((btn) => {
+          const btnStatus = btn.dataset.status;
+          const active = st === btnStatus;
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+          btn.classList.toggle('active-present', active && btnStatus === 'Present');
+          btn.classList.toggle('active-absent', active && btnStatus === 'Absent');
+          btn.classList.toggle('active-leave', active && btnStatus === 'Leave');
+        });
+      });
+    }
+
+    const summaryEl = document.getElementById(`${cfg.prefix}-summary`);
+    if (summaryEl) {
+      const filterNote = visibleStudents.length !== allStudents.length
+        ? `Showing ${escapeHTML(visibleStudents.length)} of ${escapeHTML(allStudents.length)} &bull; `
+        : '';
+      summaryEl.innerHTML = `
+        <span>${filterNote}Class Marked: <strong>${escapeHTML(countsAll.marked)} / ${escapeHTML(countsAll.total)}</strong></span>
+        <span class="drill-pill att-pill-present">&#10003; Present: ${escapeHTML(countsVis.present)}</span>
+        <span class="drill-pill att-pill-absent">&#10005; Absent: ${escapeHTML(countsVis.absent)}</span>
+        <span class="drill-pill att-pill-leave">&#9719; Leave: ${escapeHTML(countsVis.leave)}</span>
+        <span>Unmarked: ${escapeHTML(countsVis.unmarked)}</span>
+      `;
+    }
+
+    const badgeEl = document.getElementById(`${cfg.prefix}-unsaved-badge`);
+    if (badgeEl) {
+      const dirty = !!state[cfg.dirtyKey];
+      badgeEl.classList.toggle('is-dirty', dirty);
+      if (dirty) {
+        badgeEl.textContent = 'Unsaved edits — click Save below';
+      } else if (savedSession) {
+        badgeEl.textContent = `Saved roll (${countsAll.marked} marked)`;
+      } else {
+        badgeEl.textContent = 'Not saved for this date yet';
+      }
+    }
+
+    const footerStatusEl = document.getElementById(`${cfg.prefix}-footer-status`);
+    if (footerStatusEl) {
+      footerStatusEl.textContent = `${countsAll.marked} / ${countsAll.total} students marked (P:${countsAll.present} • A:${countsAll.absent} • L:${countsAll.leave})`;
+    }
+  }
+
+  async function refreshAttendanceModule(mode, options = {}) {
+    const cfg = ATTENDANCE_MODES[mode];
+    if (!cfg) return;
+
+    const bc = document.getElementById(cfg.breadcrumbElId);
+    const content = document.getElementById(cfg.contentElId);
+    if (!bc || !content) return;
+
+    const classId = state[cfg.classKey];
+    const itemVal = state[cfg.itemKey];
+    const todayStr = window.AppStorage.getLocalTodayDate();
+
+    // Render Breadcrumb
+    let bcHtml = `<button type="button" class="crumb-btn" id="${cfg.prefix}-bc-root">All Classes</button>`;
+    if (classId) {
+      const clsLabel = window.AppStorage.getClassLabel(classId);
+      bcHtml += `<span class="crumb-sep">/</span>`;
+      if (itemVal) {
+        bcHtml += `<button type="button" class="crumb-btn" id="${cfg.prefix}-bc-class">${escapeHTML(clsLabel)}</button>`;
+        bcHtml += `<span class="crumb-sep">/</span><span class="crumb-current">${escapeHTML(itemVal)}</span>`;
+      } else {
+        bcHtml += `<span class="crumb-current">${escapeHTML(clsLabel)}</span>`;
+      }
+    }
+    bc.innerHTML = bcHtml;
+
+    const rootBtn = document.getElementById(`${cfg.prefix}-bc-root`);
+    if (rootBtn) {
+      rootBtn.addEventListener('click', () => {
+        if (!classId) return;
+        guardUnsavedPortalEdits(() => {
+          state[cfg.classKey] = null;
+          state[cfg.itemKey] = null;
+          state[cfg.dirtyKey] = false;
+          refreshAttendanceModule(mode);
+        });
+      });
+    }
+
+    const classBcBtn = document.getElementById(`${cfg.prefix}-bc-class`);
+    if (classBcBtn) {
+      classBcBtn.addEventListener('click', () => {
+        if (!itemVal) return;
+        guardUnsavedPortalEdits(() => {
+          state[cfg.itemKey] = null;
+          state[cfg.dirtyKey] = false;
+          refreshAttendanceModule(mode);
+        });
+      });
+    }
+
+    // LEVEL 0: All Classes (6th to 12th)
+    if (!classId) {
+      state[cfg.dirtyKey] = false;
+      const classes = window.AppStorage.getClasses();
+      const allSessions = await cfg.getSessions({});
+      const cards = [];
+
+      for (const c of classes) {
+        const stus = await window.AppStorage.getStudentsByClass(c.id);
+        const items = await cfg.getLevel1Items(c.id);
+        const todayCount = allSessions.filter((s) => s.classId === c.id && s.date === todayStr).length;
+        const itemLabel = mode === 'prep' ? '3 Prep Boxes' : `${items.length} Subjects`;
+
+        cards.push(`
+          <div class="drill-box" data-cid="${escapeHTML(c.id)}" tabindex="0" role="button">
+            <div class="drill-box-top">
+              <div>
+                <div class="drill-box-title">${escapeHTML(c.label)}</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} ${stus.length === 1 ? 'Student' : 'Students'} &bull; ${escapeHTML(itemLabel)}</div>
+              </div>
+              <span class="drill-pill ${todayCount > 0 ? 'drill-pill-green' : ''}">${escapeHTML(todayCount)} / ${escapeHTML(items.length)} Today</span>
+            </div>
+            <div class="drill-box-footer">
+              <span>${escapeHTML(cfg.level1Prompt)} &rarr;</span>
+            </div>
+          </div>
+        `);
+      }
+
+      content.innerHTML = `<div class="drill-grid">${cards.join('')}</div>`;
+      content.querySelectorAll('.drill-box').forEach((box) => {
+        box.addEventListener('click', () => {
+          state[cfg.classKey] = box.dataset.cid;
+          state[cfg.itemKey] = null;
+          state[cfg.secKey] = 'ALL';
+          state[cfg.dirtyKey] = false;
+          refreshAttendanceModule(mode);
+        });
+      });
+      return;
+    }
+
+    // LEVEL 1: Subjects (Classes Attendance) OR Prep 1, Prep 2, Prep 3 (Prep Attendance)
+    if (!itemVal) {
+      state[cfg.dirtyKey] = false;
+      const classLabel = window.AppStorage.getClassLabel(classId);
+      const classStudents = await window.AppStorage.getStudentsByClass(classId);
+      const items = await cfg.getLevel1Items(classId);
+      const classSessions = await cfg.getSessions({ classId });
+
+      content.innerHTML = `
+        <h3 style="font-size:1.1rem; font-weight:800; margin-bottom:12px;">
+          ${escapeHTML(classLabel)} &mdash; ${mode === 'prep' ? 'Select Prep Box (Prep 1, 2, 3)' : 'Select Subject'}
+        </h3>
+        <div class="drill-grid">
+          ${items.map((itemName) => {
+            const matchingAll = classSessions.filter(
+              (e) => window.AppStorage.normalizeText(e[cfg.itemField]).toLowerCase() === itemName.toLowerCase()
+            );
+            const todayEntry = matchingAll.find((e) => e.date === todayStr);
+            const counts = todayEntry ? summarizeAttendanceDraft(classStudents, todayEntry.records || {}) : null;
+
+            const subLine = counts
+              ? `Today (${todayStr}): P:${counts.present} • A:${counts.absent} • L:${counts.leave}`
+              : `${classStudents.length} Students • ${matchingAll.length} saved ${matchingAll.length === 1 ? 'date' : 'dates'}`;
+            const pillHtml = counts
+              ? `<span class="drill-pill drill-pill-green">&#10003; ${escapeHTML(counts.marked)}/${escapeHTML(classStudents.length)} Today</span>`
+              : `<span class="drill-pill">${escapeHTML(matchingAll.length)} Saved</span>`;
+
+            return `
+              <div class="drill-box" data-item="${escapeHTML(itemName)}" tabindex="0" role="button">
+                <div class="drill-box-top">
+                  <div>
+                    <div class="drill-box-title">${escapeHTML(itemName)}</div>
+                    <div class="drill-box-sub">${escapeHTML(subLine)}</div>
+                  </div>
+                  ${pillHtml}
+                </div>
+                <div class="drill-box-footer">
+                  <span>Open Student Roll (${escapeHTML(classStudents.length)}) &rarr;</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      content.querySelectorAll('.drill-box').forEach((box) => {
+        box.addEventListener('click', () => {
+          state[cfg.itemKey] = box.dataset.item;
+          state[cfg.dateKey] = window.AppStorage.getLocalTodayDate();
+          state[cfg.secKey] = 'ALL';
+          state[cfg.dirtyKey] = false;
+          state[cfg.draftKey] = {};
+          refreshAttendanceModule(mode);
+        });
+      });
+      return;
+    }
+
+    // LEVEL 2: All Students with Three Toggle Boxes (Present, Absent, Leave)
+    const activeDate = window.AppStorage.isValidYmdDate(state[cfg.dateKey])
+      ? state[cfg.dateKey]
+      : todayStr;
+    state[cfg.dateKey] = activeDate;
+
+    const students = await window.AppStorage.getStudentsByClass(classId);
+    const sessionsForItem = await cfg.getSessions({ classId, [cfg.itemField]: itemVal });
+    const savedSession = sessionsForItem.find((e) => e.date === activeDate) || null;
+
+    if (!options.preserveDraft) {
+      state[cfg.draftKey] = savedSession && savedSession.records ? { ...savedSession.records } : {};
+      state[cfg.dirtyKey] = false;
+    }
+
+    const sections = Array.from(new Set(students.map((s) => s.section).filter(Boolean)));
+    if (state[cfg.secKey] !== 'ALL' && !sections.includes(state[cfg.secKey])) {
+      state[cfg.secKey] = 'ALL';
+    }
+    const filteredStudents = state[cfg.secKey] === 'ALL'
+      ? students
+      : students.filter((s) => s.section === state[cfg.secKey]);
+
+    const recentDatesHtml = sessionsForItem.length > 0
+      ? `
+        <div class="att-history-strip">
+          <span class="att-history-label">Saved Dates:</span>
+          ${sessionsForItem.slice(0, 8).map((entry) => {
+            const c = summarizeAttendanceDraft(students, entry.records || {});
+            const isCurrent = entry.date === activeDate;
+            return `
+              <button
+                type="button"
+                class="att-history-chip ${isCurrent ? 'active' : ''}"
+                data-att-date="${escapeHTML(entry.date)}"
+              >${escapeHTML(entry.date)} (P:${escapeHTML(c.present)} A:${escapeHTML(c.absent)} L:${escapeHTML(c.leave)})</button>
+            `;
+          }).join('')}
+        </div>
+      `
+      : '';
+
+    const sectionPillsHtml = sections.length > 1
+      ? `
+        <div class="att-section-pills" role="group" aria-label="Filter students by section">
+          <button type="button" class="att-filter-pill ${state[cfg.secKey] === 'ALL' ? 'active' : ''}" data-att-sec="ALL">
+            All (${escapeHTML(students.length)})
+          </button>
+          ${sections.map((sec) => `
+            <button type="button" class="att-filter-pill ${state[cfg.secKey] === sec ? 'active' : ''}" data-att-sec="${escapeHTML(sec)}">
+              ${escapeHTML(sec)}
+            </button>
+          `).join('')}
+        </div>
+      `
+      : `<div><span class="drill-pill">${escapeHTML(students.length)} Students in Class</span></div>`;
+
+    content.innerHTML = `
+      <div class="att-toolbar">
+        <div class="att-toolbar-top">
+          <div>
+            <h3 class="att-toolbar-title">${escapeHTML(itemVal)} &mdash; ${escapeHTML(window.AppStorage.getClassLabel(classId))}</h3>
+            <p class="att-toolbar-sub">Mark Present, Absent, or Leave in front of each student and click Save.</p>
+            <span id="${cfg.prefix}-unsaved-badge" class="tests-unsaved-badge" aria-live="polite" style="margin-top:6px;"></span>
+          </div>
+          <div class="att-toolbar-meta">
+            <div class="att-date-field">
+              <label for="${cfg.prefix}-date-input">Date:</label>
+              <input type="date" id="${cfg.prefix}-date-input" class="att-date-input" value="${escapeHTML(activeDate)}" />
+            </div>
+          </div>
+        </div>
+
+        <div class="att-filter-bar">
+          ${sectionPillsHtml}
+          <div class="att-bulk-actions">
+            <button type="button" class="btn btn-outline btn-sm" id="${cfg.prefix}-mark-all-present">&#10003; Mark All Present</button>
+            <button type="button" class="btn btn-outline btn-sm" id="${cfg.prefix}-clear-draft">Clear View</button>
+          </div>
+        </div>
+
+        ${recentDatesHtml}
+      </div>
+
+      <div id="${cfg.prefix}-summary" class="att-summary-bar" aria-live="polite"></div>
+
+      <div id="${cfg.prefix}-rows-list" class="att-rows-list">
+        ${filteredStudents.length === 0
+          ? `<div class="empty-state"><h3>No Students Found</h3><p>No students belong to the selected class or section filter.</p></div>`
+          : filteredStudents.map((s, idx) => `
+              <div class="att-student-row" data-sid="${escapeHTML(s.id)}">
+                <div class="att-student-info">
+                  <div class="att-student-name">${idx + 1}. ${escapeHTML(s.name)}</div>
+                  <div class="att-student-meta">Roll #${escapeHTML(s.rollNumber || '-')} &bull; ${escapeHTML(s.section || 'General')} &bull; Father: ${escapeHTML(s.family || '-')}</div>
+                </div>
+                <div class="att-status-group" role="group" aria-label="Attendance status for ${escapeHTML(s.name)}">
+                  <button type="button" class="att-status-btn" data-sid="${escapeHTML(s.id)}" data-status="Present" aria-pressed="false">&#10003; Present</button>
+                  <button type="button" class="att-status-btn" data-sid="${escapeHTML(s.id)}" data-status="Absent" aria-pressed="false">&#10005; Absent</button>
+                  <button type="button" class="att-status-btn" data-sid="${escapeHTML(s.id)}" data-status="Leave" aria-pressed="false">&#9719; Leave</button>
+                </div>
+              </div>
+            `).join('')
+        }
+      </div>
+
+      <div class="att-footer">
+        <span id="${cfg.prefix}-footer-status" style="font-size:0.84rem; font-weight:700; color:var(--navy);"></span>
+        <button type="button" class="btn btn-primary" id="${cfg.prefix}-btn-save">
+          Save ${escapeHTML(cfg.title)}
+        </button>
+      </div>
+    `;
+
+    syncAttendanceDraftDom(mode, students, filteredStudents, savedSession);
+
+    // Per-student 3-box clicks (Present / Absent / Leave)
+    const rowsContainer = document.getElementById(`${cfg.prefix}-rows-list`);
+    if (rowsContainer) {
+      rowsContainer.querySelectorAll('.att-status-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const sid = btn.dataset.sid;
+          const status = btn.dataset.status;
+          state[cfg.draftKey][sid] = status;
+          state[cfg.dirtyKey] = true;
+          syncAttendanceDraftDom(mode, students, filteredStudents, savedSession);
+        });
+      });
+    }
+
+    // Mark All Present (visible section or full class)
+    const markAllBtn = document.getElementById(`${cfg.prefix}-mark-all-present`);
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', () => {
+        filteredStudents.forEach((s) => {
+          state[cfg.draftKey][s.id] = 'Present';
+        });
+        state[cfg.dirtyKey] = true;
+        syncAttendanceDraftDom(mode, students, filteredStudents, savedSession);
+      });
+    }
+
+    // Clear visible draft marks
+    const clearBtn = document.getElementById(`${cfg.prefix}-clear-draft`);
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        filteredStudents.forEach((s) => {
+          delete state[cfg.draftKey][s.id];
+        });
+        state[cfg.dirtyKey] = true;
+        syncAttendanceDraftDom(mode, students, filteredStudents, savedSession);
+      });
+    }
+
+    // Section filter pills (preserve unsaved draft across sections)
+    content.querySelectorAll('[data-att-sec]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        state[cfg.secKey] = pill.dataset.attSec;
+        refreshAttendanceModule(mode, { preserveDraft: true });
+      });
+    });
+
+    // Date switcher with unsaved guard
+    const dateInput = document.getElementById(`${cfg.prefix}-date-input`);
+    if (dateInput) {
+      dateInput.addEventListener('change', () => {
+        const chosen = dateInput.value;
+        if (!window.AppStorage.isValidYmdDate(chosen)) {
+          dateInput.value = activeDate;
+          showToast('Please select a valid calendar date.', 'error');
+          return;
+        }
+        if (chosen === activeDate) return;
+        guardUnsavedPortalEdits(
+          () => {
+            state[cfg.dateKey] = chosen;
+            state[cfg.dirtyKey] = false;
+            refreshAttendanceModule(mode);
+          },
+          () => {
+            dateInput.value = activeDate;
+          }
+        );
+      });
+    }
+
+    // Recent saved dates quick chips
+    content.querySelectorAll('[data-att-date]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const chosen = chip.dataset.attDate;
+        if (chosen === activeDate) return;
+        guardUnsavedPortalEdits(() => {
+          state[cfg.dateKey] = chosen;
+          state[cfg.dirtyKey] = false;
+          refreshAttendanceModule(mode);
+        });
+      });
+    });
+
+    // Save button
+    const saveBtn = document.getElementById(`${cfg.prefix}-btn-save`);
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const draft = state[cfg.draftKey] || {};
+        if (Object.keys(draft).length === 0) {
+          showToast('Mark Present, Absent, or Leave for at least one student before saving.', 'error');
+          return;
+        }
+        try {
+          await cfg.saveSession({
+            classId,
+            [cfg.itemField]: itemVal,
+            date: activeDate,
+            records: draft
+          });
+          state[cfg.dirtyKey] = false;
+          showToast(`${cfg.title} saved for ${itemVal} (${activeDate})!`, 'success');
+          await refreshAttendanceModule(mode);
+          await updateHomeStats();
+        } catch (err) {
+          showToast(err.message || 'Unable to save attendance.', 'error', 5000);
+        }
+      });
+    }
+  }
+
+  /* ========================================================================
      MODULE 3: Monthly Tests & Marks
      ======================================================================== */
   async function refreshTestsModule() {
@@ -2248,10 +2817,38 @@
     const hw = dossier.homework;
     const viol = dossier.violations;
     const tst = dossier.tests;
+    const att = dossier.attendance || {
+      classAttendance: { total: 0, present: 0, absent: 0, leave: 0, percent: null, recent: [] },
+      prepAttendance: { total: 0, present: 0, absent: 0, leave: 0, percent: null, recent: [] },
+      combined: { total: 0, present: 0, absent: 0, leave: 0, percent: null }
+    };
 
     const hwPct = hw.overall && hw.overall.percentage !== null ? `${hw.overall.percentage}%` : 'No Data';
     const hwRatio = hw.overall ? `${hw.overall.doneCount} / ${hw.overall.totalMarked}` : '0 / 0';
     const testPct = tst.overallPercent !== null ? `${tst.overallPercent}% (${getGradeLabel(tst.overallPercent)})` : 'No Tests';
+    const classAttPct = att.classAttendance.percent !== null ? `${att.classAttendance.percent}%` : 'No Data';
+    const prepAttPct = att.prepAttendance.percent !== null ? `${att.prepAttendance.percent}%` : 'No Data';
+
+    const attMergedRecent = [
+      ...att.classAttendance.recent.map((r) => ({ ...r, category: 'Class Subject' })),
+      ...att.prepAttendance.recent.map((r) => ({ ...r, category: 'Prep Session' }))
+    ].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 12);
+
+    const renderAttSummaryTile = (title, stats) => {
+      const rateStr = stats.percent !== null ? `${stats.percent}% Present` : 'No Rolls Yet';
+      return `
+        <div class="kpi-box" style="box-shadow:none; background:var(--bg-muted-surface);">
+          <div class="kpi-label">${escapeHTML(title)}</div>
+          <div class="kpi-value" style="font-size:1.25rem;">${escapeHTML(rateStr)}</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">
+            <span class="drill-pill att-pill-present">&#10003; P: ${escapeHTML(stats.present)}</span>
+            <span class="drill-pill att-pill-absent">&#10005; A: ${escapeHTML(stats.absent)}</span>
+            <span class="drill-pill att-pill-leave">&#9719; L: ${escapeHTML(stats.leave)}</span>
+          </div>
+          <div class="kpi-sub" style="margin-top:6px;">${escapeHTML(stats.total)} recorded ${stats.total === 1 ? 'session' : 'sessions'}</div>
+        </div>
+      `;
+    };
 
     // WhatsApp message formatter
     const cleanPhoneForWa = (num) => {
@@ -2266,6 +2863,8 @@
       `*Hadi Education System Balkassar — Student Grand Report*\n` +
       `Student: *${s.name}* (Roll #${s.rollNumber})\n` +
       `Class: ${s.classLabel} (${s.section}) | Father: ${s.family}\n\n` +
+      `• *Classes Attendance:* ${classAttPct} (P:${att.classAttendance.present}, A:${att.classAttendance.absent}, L:${att.classAttendance.leave})\n` +
+      `• *Prep Attendance:* ${prepAttPct} (P:${att.prepAttendance.present}, A:${att.prepAttendance.absent}, L:${att.prepAttendance.leave})\n` +
       `• *Violations:* ${viol.total} (Score: ${viol.score}/${window.AppStorage.MAX_SCORE} - ${viol.statusLabel})\n` +
       `• *Homework Completion:* ${hwRatio} (${hwPct})\n` +
       `• *Pending Unclear Concepts:* ${hw.activePendingTasks.length}\n` +
@@ -2320,6 +2919,54 @@
             <div class="kpi-value" style="color:var(--emerald);">${escapeHTML(testPct)}</div>
             <div class="kpi-sub">${escapeHTML(tst.overallObtained)} / ${escapeHTML(tst.overallTotal)} marks</div>
           </div>
+        </div>
+
+        <!-- 2B. Attendance Overview (Classes Attendance & Prep Attendance) -->
+        <div class="dossier-section-card">
+          <div class="dossier-section-title">
+            <span>Attendance Summary (Classes &amp; Prep)</span>
+            <span class="drill-pill drill-pill-blue">
+              ${att.combined.percent !== null ? `Overall: ${escapeHTML(att.combined.percent)}% (${escapeHTML(att.combined.present)} / ${escapeHTML(att.combined.total)})` : 'No Attendance Recorded'}
+            </span>
+          </div>
+          <div class="drill-grid" style="margin-bottom:${attMergedRecent.length > 0 ? '16px' : '0'};">
+            ${renderAttSummaryTile('Classes Attendance (Subject-Wise)', att.classAttendance)}
+            ${renderAttSummaryTile('Prep Attendance (Prep 1–3)', att.prepAttendance)}
+          </div>
+          ${attMergedRecent.length === 0
+            ? `<p style="font-size:0.875rem; color:var(--text-muted);">No class or prep attendance marked for this student yet.</p>`
+            : `<div class="table-wrapper">
+                <div class="table-scroll-container">
+                  <table class="sheet-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Subject / Prep Box</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${attMergedRecent.map((item) => {
+                        const pillCls = item.status === 'Present'
+                          ? 'att-pill-present'
+                          : item.status === 'Absent'
+                            ? 'att-pill-absent'
+                            : 'att-pill-leave';
+                        return `
+                          <tr>
+                            <td>${escapeHTML(item.date)}</td>
+                            <td>${escapeHTML(item.category)}</td>
+                            <td><strong>${escapeHTML(item.label)}</strong></td>
+                            <td><span class="drill-pill ${pillCls}">${escapeHTML(item.status)}</span></td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>`
+          }
         </div>
 
         <!-- 3. Section A: Homework Breakdown & Pending Tasks -->
@@ -2554,6 +3201,8 @@
         <div class="confirm-details-row"><span>Exported</span><strong>${escapeHTML(p.exportedAt ? formatDateTime(p.exportedAt) : 'Unspecified')}</strong></div>
         <div class="confirm-details-row"><span>Violation Records</span><strong>${escapeHTML(p.complaintsCount)}</strong></div>
         <div class="confirm-details-row"><span>Homework Assignments</span><strong>${escapeHTML(p.homeworksCount)}</strong></div>
+        <div class="confirm-details-row"><span>Classes Attendance Rolls</span><strong>${escapeHTML(p.classAttendanceCount || 0)}</strong></div>
+        <div class="confirm-details-row"><span>Prep Attendance Rolls</span><strong>${escapeHTML(p.prepAttendanceCount || 0)}</strong></div>
         <div class="confirm-details-row"><span>Monthly Tests</span><strong>${escapeHTML(p.testsCount)}</strong></div>
         <div class="confirm-details-row"><span>Custom Students</span><strong>${escapeHTML(p.customStudentsCount)}</strong></div>
         <div class="confirm-details-row"><span>Custom Subjects</span><strong>${escapeHTML(p.customSubjectsCount)}</strong></div>
@@ -2569,7 +3218,7 @@
           try {
             const res = await window.AppStorage.importJSON(json);
             showToast(
-              `Restored: ${res.complaintsCount} violations, ${res.homeworksCount} homeworks, ${res.testsCount} tests.`,
+              `Restored: ${res.complaintsCount} violations, ${res.homeworksCount} homeworks, ${res.classAttendanceCount || 0} class att, ${res.prepAttendanceCount || 0} prep att, ${res.testsCount} tests.`,
               'success',
               4500
             );
@@ -2643,6 +3292,24 @@
         state.hwMode = 'browse';
         switchScreen('homework');
         setTimeout(() => toggleHwFormDrawer(true), 40);
+      });
+    }
+    const qaClassAtt = document.getElementById('qa-class-attendance');
+    if (qaClassAtt) {
+      qaClassAtt.addEventListener('click', () => {
+        state.caClassId = null;
+        state.caSubject = null;
+        state.caDirty = false;
+        switchScreen('class-attendance');
+      });
+    }
+    const qaPrepAtt = document.getElementById('qa-prep-attendance');
+    if (qaPrepAtt) {
+      qaPrepAtt.addEventListener('click', () => {
+        state.paClassId = null;
+        state.paPrepSlot = null;
+        state.paDirty = false;
+        switchScreen('prep-attendance');
       });
     }
     const qaTest = document.getElementById('qa-create-test');
@@ -2909,7 +3576,7 @@
 
     // Unsaved marks browser unload protection
     window.addEventListener('beforeunload', (e) => {
-      if (hasUnsavedTestMarks()) {
+      if (hasUnsavedTestMarks() || hasUnsavedAttendance()) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -2972,7 +3639,7 @@
     });
 
     // Service Worker Safe Update Helpers
-    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || !!state.hwFormOpen;
+    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || hasUnsavedAttendance() || !!state.hwFormOpen;
     window.__hesConfirmAndApplyUpdate = (worker) => {
       openConfirmDialog({
         title: 'Apply Portal Update?',
@@ -2981,6 +3648,8 @@
         confirmBtnClass: 'btn-primary',
         onConfirm: () => {
           state.testsDirty = false;
+          state.caDirty = false;
+          state.paDirty = false;
           if (worker) worker.postMessage({ type: 'SKIP_WAITING' });
         }
       });

@@ -87,6 +87,31 @@
           <span class="nav-count nav-count-amber" id="snav-badge-pending">0</span>
         </button>
 
+        <button type="button" class="nav-link" data-screen="class-attendance" id="desk-nav-class-attendance" title="Classes Attendance">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <path d="m9 16 2 2 4-4"/>
+            </svg>
+          </span>
+          <span class="nav-label">Classes Attendance</span>
+          <span class="nav-count nav-count-sky" id="snav-badge-class-att">0</span>
+        </button>
+
+        <button type="button" class="nav-link" data-screen="prep-attendance" id="desk-nav-prep-attendance" title="Prep Attendance">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <polyline points="12 7 12 12 15 15"/>
+            </svg>
+          </span>
+          <span class="nav-label">Prep Attendance</span>
+          <span class="nav-count nav-count-violet" id="snav-badge-prep-att">0</span>
+        </button>
+
         <button type="button" class="nav-link" data-screen="tests" id="desk-nav-tests" title="Monthly Tests">
           <span class="nav-icon" aria-hidden="true">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
@@ -277,6 +302,23 @@
                   </svg>
                   <span>Add Homework</span>
                 </button>
+                <button type="button" class="qa-pill qa-class-att" id="qa-class-attendance">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                    <path d="m9 16 2 2 4-4"/>
+                  </svg>
+                  <span>Classes Attendance</span>
+                </button>
+                <button type="button" class="qa-pill qa-prep-att" id="qa-prep-attendance">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/>
+                    <polyline points="12 7 12 12 15 15"/>
+                  </svg>
+                  <span>Prep Attendance</span>
+                </button>
                 <button type="button" class="qa-pill qa-test" id="qa-create-test">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -354,13 +396,23 @@
               <span class="home-stat-sub">Unclear concepts needing help</span>
             </div>
             <div class="home-stat-chip">
+              <span class="home-stat-lbl">Classes Att. Today</span>
+              <span class="home-stat-num" id="home-stat-class-att">0</span>
+              <span class="home-stat-sub">Subject rolls marked today</span>
+            </div>
+            <div class="home-stat-chip">
+              <span class="home-stat-lbl">Prep Att. Today</span>
+              <span class="home-stat-num" id="home-stat-prep-att">0</span>
+              <span class="home-stat-sub">Prep 1–3 rolls marked today</span>
+            </div>
+            <div class="home-stat-chip">
               <span class="home-stat-lbl">Monthly Tests</span>
               <span class="home-stat-num" id="home-stat-tests">0</span>
               <span class="home-stat-sub">Created assessment boxes</span>
             </div>
           </div>
 
-          <!-- 4 Primary Module Cards -->
+          <!-- 6 Primary Module Cards -->
           <div class="home-portal-grid" role="navigation" aria-label="Main Portal Modules">
 
             <!-- Card 1: Violations (Warm Terracotta) -->
@@ -413,7 +465,58 @@
               </div>
             </div>
 
-            <!-- Card 3: Monthly Tests (Indigo) -->
+            <!-- Card 3: Classes Attendance (Sky Blue) -->
+            <div class="curved-action-card module-card module-class-att" data-target="class-attendance" id="card-class-attendance" tabindex="0" role="button" aria-label="Open Classes Attendance">
+              <div class="card-accent-strip accent-class-att"></div>
+              <div class="curved-card-header">
+                <div class="curved-card-icon icon-class-att" aria-hidden="true">
+                  <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                    <path d="m9 16 2 2 4-4"/>
+                  </svg>
+                </div>
+                <span class="card-tag tag-class-att" id="home-class-att-tag">0 Saved Rolls</span>
+              </div>
+              <div class="curved-card-body">
+                <h3 class="curved-card-title">Classes Attendance</h3>
+                <p class="curved-card-desc">
+                  Open Classes 6th–12th, select any subject, and mark every student Present, Absent, or Leave by date with quick save.
+                </p>
+              </div>
+              <div class="curved-card-footer">
+                <span class="card-action-text text-class-att">Mark Subject Attendance</span>
+                <span class="card-arrow-circle arrow-class-att" aria-hidden="true">&rarr;</span>
+              </div>
+            </div>
+
+            <!-- Card 4: Prep Attendance (Royal Violet) -->
+            <div class="curved-action-card module-card module-prep-att" data-target="prep-attendance" id="card-prep-attendance" tabindex="0" role="button" aria-label="Open Prep Attendance">
+              <div class="card-accent-strip accent-prep-att"></div>
+              <div class="curved-card-header">
+                <div class="curved-card-icon icon-prep-att" aria-hidden="true">
+                  <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"/>
+                    <polyline points="12 7 12 12 15 15"/>
+                  </svg>
+                </div>
+                <span class="card-tag tag-prep-att" id="home-prep-att-tag">Prep 1 &bull; 2 &bull; 3</span>
+              </div>
+              <div class="curved-card-body">
+                <h3 class="curved-card-title">Prep Attendance</h3>
+                <p class="curved-card-desc">
+                  Open Classes 6th–12th, select Prep 1, Prep 2, or Prep 3, and mark every student Present, Absent, or Leave per prep session.
+                </p>
+              </div>
+              <div class="curved-card-footer">
+                <span class="card-action-text text-prep-att">Mark Prep Attendance</span>
+                <span class="card-arrow-circle arrow-prep-att" aria-hidden="true">&rarr;</span>
+              </div>
+            </div>
+
+            <!-- Card 5: Monthly Tests (Indigo) -->
             <div class="curved-action-card module-card module-tests" data-target="tests" tabindex="0" role="button" aria-label="Open Monthly Tests">
               <div class="card-accent-strip accent-tests"></div>
               <div class="curved-card-header">
@@ -438,7 +541,7 @@
               </div>
             </div>
 
-            <!-- Card 4: Grand Student Report (Deep Navy) -->
+            <!-- Card 6: Grand Student Report (Deep Navy) -->
             <div class="curved-action-card module-card module-grand grand-report-hero-card" data-target="grand-report" tabindex="0" role="button" aria-label="Open Grand Student Report">
               <div class="grand-card-inner">
                 <div class="grand-card-left">
@@ -453,7 +556,7 @@
                   </div>
                   <h3 class="curved-card-title grand-card-title">Grand Student Report</h3>
                   <p class="curved-card-desc">
-                    Browse by class and search any student to open their complete dossier: Violations, Homework Ratios, Pending Unclear Concepts, Monthly Test Scores, Print View, and Guardian Contact.
+                    Browse by class and search any student to open their complete dossier: Attendance, Violations, Homework, Monthly Tests, Print View, and Guardian Contact.
                   </p>
                 </div>
                 <div class="grand-card-right">
@@ -845,6 +948,42 @@
         </section>
 
         <!-- ==================================================================
+             SCREEN 2B: CLASSES ATTENDANCE MODULE
+             ================================================================== -->
+        <section id="screen-class-attendance" class="screen" aria-labelledby="class-att-heading">
+          <div class="screen-top-bar">
+            <button type="button" class="btn-back-home" aria-label="Back to Home">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Home</span>
+            </button>
+            <h2 id="class-att-heading" class="screen-title">Classes Attendance</h2>
+          </div>
+
+          <div class="drill-breadcrumb" id="ca-breadcrumb"></div>
+          <div id="ca-drill-content"></div>
+        </section>
+
+        <!-- ==================================================================
+             SCREEN 2C: PREP ATTENDANCE MODULE
+             ================================================================== -->
+        <section id="screen-prep-attendance" class="screen" aria-labelledby="prep-att-heading">
+          <div class="screen-top-bar">
+            <button type="button" class="btn-back-home" aria-label="Back to Home">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Home</span>
+            </button>
+            <h2 id="prep-att-heading" class="screen-title">Prep Attendance</h2>
+          </div>
+
+          <div class="drill-breadcrumb" id="pa-breadcrumb"></div>
+          <div id="pa-drill-content"></div>
+        </section>
+
+        <!-- ==================================================================
              SCREEN 3: MONTHLY TESTS MODULE
              ================================================================== -->
         <section id="screen-tests" class="screen" aria-labelledby="tests-heading">
@@ -989,6 +1128,23 @@
         <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
       </svg>
       <span>Homework</span>
+    </button>
+    <button type="button" class="tab-btn" data-screen="class-attendance" id="tab-nav-class-attendance">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <path d="m9 16 2 2 4-4"/>
+      </svg>
+      <span>Classes Att.</span>
+    </button>
+    <button type="button" class="tab-btn" data-screen="prep-attendance" id="tab-nav-prep-attendance">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15 15"/>
+      </svg>
+      <span>Prep Att.</span>
     </button>
     <button type="button" class="tab-btn" data-screen="tests" id="tab-nav-tests">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

@@ -12,8 +12,136 @@
     COMPLAINTS: 'sct_complaints_v1',
     HOMEWORKS: 'hes_homeworks_v2',
     TESTS: 'hes_monthly_tests_v2',
-    SUBJECTS: 'hes_custom_subjects_v2'
+    SUBJECTS: 'hes_custom_subjects_v2',
+    CLASS_ATTENDANCE: 'hes_class_attendance_v1',
+    PREP_ATTENDANCE: 'hes_prep_attendance_v1'
   };
+
+  const PREP_SLOTS = ['Prep 1', 'Prep 2', 'Prep 3'];
+  const ATTENDANCE_STATUSES = ['Present', 'Absent', 'Leave'];
+  const ATTENDANCE_STATUS_SET = new Set(ATTENDANCE_STATUSES);
+
+  function getLocalTodayDate() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function isValidYmdDate(str) {
+    if (typeof str !== 'string') return false;
+    const trimmed = str.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+    const [y, m, d] = trimmed.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+  }
+
+  function cleanAttendanceRecordsMap(records, validStudentIds = null) {
+    if (!isPlainObject(records)) {
+      throw new Error('Attendance records must be a student-keyed object.');
+    }
+    const clean = {};
+    for (const [sid, status] of Object.entries(records)) {
+      if (validStudentIds && (!isValidId(sid) || !validStudentIds.has(sid))) {
+        throw new Error(`Attendance references unknown student ID "${sid}".`);
+      }
+      if (status === undefined || status === null || status === '') continue;
+      if (typeof status !== 'string' || !ATTENDANCE_STATUS_SET.has(status)) {
+        throw new Error(`Invalid attendance status "${String(status)}" for student "${sid}". Expected Present, Absent, or Leave.`);
+      }
+      clean[sid] = status;
+    }
+    return clean;
+  }
+
+  function summarizeStudentAttendanceEntries(entries, studentId, getItemLabel) {
+    let total = 0;
+    let present = 0;
+    let absent = 0;
+    let leave = 0;
+    const recent = [];
+
+    entries.forEach((entry) => {
+      const status = entry.records && entry.records[studentId];
+      if (!status || !ATTENDANCE_STATUS_SET.has(status)) return;
+      total++;
+      if (status === 'Present') present++;
+      else if (status === 'Absent') absent++;
+      else if (status === 'Leave') leave++;
+      recent.push({
+        id: entry.id,
+        date: entry.date,
+        label: getItemLabel(entry),
+        status
+      });
+    });
+
+    recent.sort((a, b) => b.date.localeCompare(a.date));
+    return {
+      total,
+      present,
+      absent,
+      leave,
+      percent: total > 0 ? Math.round((present / total) * 100) : null,
+      recent: recent.slice(0, 12)
+    };
+  }
+
+  function validateAttendanceImportEntries(rawList, opts, validClasses, validStudentIds) {
+    const seenIds = new Set();
+    return (rawList || []).map((entry, idx) => {
+      if (!isPlainObject(entry)) {
+        throw new Error(`Invalid ${opts.label} entry at index ${idx}.`);
+      }
+      if (!isValidId(entry.id) || seenIds.has(entry.id.trim())) {
+        throw new Error(`Invalid or duplicate ${opts.label} ID at index ${idx}.`);
+      }
+      const id = entry.id.trim();
+      seenIds.add(id);
+
+      const cid = normalizeClassId(entry.classId);
+      if (!validClasses.has(cid)) {
+        throw new Error(`${opts.label} "${id}" has unrecognized class "${String(entry.classId)}".`);
+      }
+
+      const dateStr = typeof entry.date === 'string' ? entry.date.trim() : '';
+      if (!isValidYmdDate(dateStr)) {
+        throw new Error(`${opts.label} "${id}" has an invalid date "${String(entry.date)}". Expected YYYY-MM-DD.`);
+      }
+
+      let itemVal = normalizeText(entry[opts.itemField]);
+      if (opts.allowedItems) {
+        const canonical = opts.allowedItems.find((x) => x.toLowerCase() === itemVal.toLowerCase());
+        if (!canonical) {
+          throw new Error(`${opts.label} "${id}" has unsupported slot "${String(entry[opts.itemField])}".`);
+        }
+        itemVal = canonical;
+      } else if (!itemVal || itemVal.length > 100) {
+        throw new Error(`${opts.label} "${id}" is missing a valid ${opts.itemField}.`);
+      }
+
+      if (entry.createdAt !== undefined && !isValidDateString(entry.createdAt)) {
+        throw new Error(`${opts.label} "${id}" has invalid createdAt timestamp.`);
+      }
+      if (entry.updatedAt !== undefined && !isValidDateString(entry.updatedAt)) {
+        throw new Error(`${opts.label} "${id}" has invalid updatedAt timestamp.`);
+      }
+
+      const cleanRecords = cleanAttendanceRecordsMap(entry.records || {}, validStudentIds);
+      const nowIso = new Date().toISOString();
+      return {
+        id,
+        classId: cid,
+        [opts.itemField]: itemVal,
+        date: dateStr,
+        records: cleanRecords,
+        createdAt: entry.createdAt || nowIso,
+        updatedAt: entry.updatedAt || entry.createdAt || nowIso
+      };
+    });
+  }
 
   const SEVERITY_CONFIG = {
     Low: { points: 1, label: 'Low', badgeClass: 'severity-low' },
@@ -192,6 +320,10 @@
   const Storage = {
     MAX_SCORE,
     SEVERITY_CONFIG,
+    PREP_SLOTS,
+    ATTENDANCE_STATUSES,
+    getLocalTodayDate,
+    isValidYmdDate,
     normalizeText,
     normalizeClassId,
     getStudentKey,
@@ -904,6 +1036,9 @@
       // 3. Monthly Tests
       const testResults = await this.getStudentTestResults(studentId);
 
+      // 4. Classes Attendance & Prep Attendance
+      const attendance = await this.getStudentAttendanceSummary(studentId);
+
       return {
         student: {
           ...student,
@@ -924,7 +1059,180 @@
           activePendingTasks,
           resolvedTasks
         },
-        tests: testResults
+        tests: testResults,
+        attendance
+      };
+    },
+
+    /* ========================================================================
+       Classes Attendance & Prep Attendance (Shared Session Engine)
+       ======================================================================== */
+    _getAttendanceList(storageKey, filter = {}, itemField = 'subject') {
+      const all = load(storageKey, []);
+      if (!Array.isArray(all)) return [];
+      const cid = filter.classId ? normalizeClassId(filter.classId) : '';
+      const itemTarget = filter[itemField] ? normalizeText(filter[itemField]).toLowerCase() : '';
+      const dateTarget = filter.date ? normalizeText(filter.date) : '';
+
+      return all
+        .filter((entry) => {
+          if (cid && normalizeClassId(entry.classId) !== cid) return false;
+          if (itemTarget && normalizeText(entry[itemField]).toLowerCase() !== itemTarget) return false;
+          if (dateTarget && entry.date !== dateTarget) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const dCmp = String(b.date || '').localeCompare(String(a.date || ''));
+          if (dCmp !== 0) return dCmp;
+          return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+        });
+    },
+
+    async _saveAttendanceSession({ storageKey, idPrefix, itemField, allowedItems, actionLabel }, payload) {
+      if (!isPlainObject(payload)) {
+        throw new Error(`Invalid ${actionLabel} submission.`);
+      }
+      const cid = normalizeClassId(payload.classId);
+      const validClasses = new Set(this.getClasses().map((c) => normalizeClassId(c.id)));
+      if (!cid || !validClasses.has(cid)) {
+        throw new Error('Please choose a valid class before saving attendance.');
+      }
+
+      let itemVal = normalizeText(payload[itemField]);
+      if (allowedItems) {
+        const canonical = allowedItems.find((slot) => slot.toLowerCase() === itemVal.toLowerCase());
+        if (!canonical) {
+          throw new Error(`Please choose a valid slot (${allowedItems.join(', ')}).`);
+        }
+        itemVal = canonical;
+      } else if (!itemVal || itemVal.length > 100) {
+        throw new Error('Please choose a valid subject before saving attendance.');
+      }
+
+      const dateStr = normalizeText(payload.date) || getLocalTodayDate();
+      if (!isValidYmdDate(dateStr)) {
+        throw new Error('Please choose a valid attendance date (YYYY-MM-DD).');
+      }
+
+      const roster = await this.getAllRosterStudents();
+      const validStudentIds = new Set(roster.map((s) => s.id));
+      const cleanRecords = cleanAttendanceRecordsMap(payload.records || {}, validStudentIds);
+      if (Object.keys(cleanRecords).length === 0) {
+        throw new Error('Mark Present, Absent, or Leave for at least one student before saving.');
+      }
+
+      const list = load(storageKey, []);
+      const nextList = Array.isArray(list) ? [...list] : [];
+      const itemKey = itemVal.toLowerCase();
+      const existingIdx = nextList.findIndex(
+        (entry) =>
+          normalizeClassId(entry.classId) === cid &&
+          normalizeText(entry[itemField]).toLowerCase() === itemKey &&
+          entry.date === dateStr
+      );
+
+      const nowIso = new Date().toISOString();
+      let savedEntry;
+      if (existingIdx >= 0) {
+        savedEntry = {
+          ...nextList[existingIdx],
+          classId: cid,
+          [itemField]: itemVal,
+          date: dateStr,
+          records: cleanRecords,
+          updatedAt: nowIso
+        };
+        nextList[existingIdx] = savedEntry;
+      } else {
+        savedEntry = {
+          id: generateId(idPrefix),
+          classId: cid,
+          [itemField]: itemVal,
+          date: dateStr,
+          records: cleanRecords,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        };
+        nextList.unshift(savedEntry);
+      }
+
+      saveOrThrow(storageKey, nextList, actionLabel);
+      this._notifyChange();
+      return savedEntry;
+    },
+
+    _deleteAttendanceSession(storageKey, id, actionLabel) {
+      const all = load(storageKey, []);
+      const filtered = (Array.isArray(all) ? all : []).filter((entry) => entry.id !== id);
+      saveOrThrow(storageKey, filtered, actionLabel);
+      this._notifyChange();
+      return true;
+    },
+
+    async getClassAttendance(filter = {}) {
+      return this._getAttendanceList(KEYS.CLASS_ATTENDANCE, filter, 'subject');
+    },
+
+    async saveClassAttendance(payload) {
+      return this._saveAttendanceSession(
+        {
+          storageKey: KEYS.CLASS_ATTENDANCE,
+          idPrefix: 'catt',
+          itemField: 'subject',
+          allowedItems: null,
+          actionLabel: 'classes attendance'
+        },
+        payload
+      );
+    },
+
+    async deleteClassAttendance(id) {
+      return this._deleteAttendanceSession(KEYS.CLASS_ATTENDANCE, id, 'classes attendance delete');
+    },
+
+    async getPrepAttendance(filter = {}) {
+      return this._getAttendanceList(KEYS.PREP_ATTENDANCE, filter, 'prepSlot');
+    },
+
+    async savePrepAttendance(payload) {
+      return this._saveAttendanceSession(
+        {
+          storageKey: KEYS.PREP_ATTENDANCE,
+          idPrefix: 'patt',
+          itemField: 'prepSlot',
+          allowedItems: PREP_SLOTS,
+          actionLabel: 'prep attendance'
+        },
+        payload
+      );
+    },
+
+    async deletePrepAttendance(id) {
+      return this._deleteAttendanceSession(KEYS.PREP_ATTENDANCE, id, 'prep attendance delete');
+    },
+
+    async getStudentAttendanceSummary(studentId) {
+      const classEntries = this._getAttendanceList(KEYS.CLASS_ATTENDANCE, {}, 'subject');
+      const prepEntries = this._getAttendanceList(KEYS.PREP_ATTENDANCE, {}, 'prepSlot');
+
+      const classAtt = summarizeStudentAttendanceEntries(classEntries, studentId, (e) => e.subject);
+      const prepAtt = summarizeStudentAttendanceEntries(prepEntries, studentId, (e) => e.prepSlot);
+
+      const total = classAtt.total + prepAtt.total;
+      const present = classAtt.present + prepAtt.present;
+      const absent = classAtt.absent + prepAtt.absent;
+      const leave = classAtt.leave + prepAtt.leave;
+
+      return {
+        classAttendance: classAtt,
+        prepAttendance: prepAtt,
+        combined: {
+          total,
+          present,
+          absent,
+          leave,
+          percent: total > 0 ? Math.round((present / total) * 100) : null
+        }
       };
     },
 
@@ -967,7 +1275,9 @@
         complaints: load(KEYS.COMPLAINTS, []),
         homeworks: load(KEYS.HOMEWORKS, []),
         tests: load(KEYS.TESTS, []),
-        customSubjects: load(KEYS.SUBJECTS, {})
+        customSubjects: load(KEYS.SUBJECTS, {}),
+        classAttendance: load(KEYS.CLASS_ATTENDANCE, []),
+        prepAttendance: load(KEYS.PREP_ATTENDANCE, [])
       };
     },
 
@@ -994,8 +1304,15 @@
         throw new Error('Invalid backup exportedAt timestamp.');
       }
 
-      const hasAnySection = ['customStudents', 'complaints', 'homeworks', 'tests', 'customSubjects']
-        .some((k) => Object.prototype.hasOwnProperty.call(data, k));
+      const hasAnySection = [
+        'customStudents',
+        'complaints',
+        'homeworks',
+        'tests',
+        'customSubjects',
+        'classAttendance',
+        'prepAttendance'
+      ].some((k) => Object.prototype.hasOwnProperty.call(data, k));
       if (!hasAnySection) {
         throw new Error('Empty or invalid backup: no recognized portal data sections found.');
       }
@@ -1014,6 +1331,12 @@
       }
       if (data.customSubjects !== undefined && !isPlainObject(data.customSubjects)) {
         throw new Error('Invalid backup: "customSubjects" must be an object.');
+      }
+      if (data.classAttendance !== undefined && !Array.isArray(data.classAttendance)) {
+        throw new Error('Invalid backup: "classAttendance" must be an array.');
+      }
+      if (data.prepAttendance !== undefined && !Array.isArray(data.prepAttendance)) {
+        throw new Error('Invalid backup: "prepAttendance" must be an array.');
       }
 
       const validClasses = new Set(this.getClasses().map((c) => normalizeClassId(c.id)));
@@ -1274,8 +1597,29 @@
         }
       }
 
+      const cleanClassAttendance = validateAttendanceImportEntries(
+        data.classAttendance || [],
+        { label: 'class attendance', itemField: 'subject', allowedItems: null },
+        validClasses,
+        validStudentIds
+      );
+
+      const cleanPrepAttendance = validateAttendanceImportEntries(
+        data.prepAttendance || [],
+        { label: 'prep attendance', itemField: 'prepSlot', allowedItems: PREP_SLOTS },
+        validClasses,
+        validStudentIds
+      );
+
       const subjClassesCount = Object.keys(cleanSubjects).length;
-      const totalItems = cleanCustomStudents.length + cleanComplaints.length + cleanHomeworks.length + cleanTests.length + subjClassesCount;
+      const totalItems =
+        cleanCustomStudents.length +
+        cleanComplaints.length +
+        cleanHomeworks.length +
+        cleanTests.length +
+        subjClassesCount +
+        cleanClassAttendance.length +
+        cleanPrepAttendance.length;
       if (totalItems === 0) {
         throw new Error('Backup contains 0 records. Empty backups are rejected to protect existing data.');
       }
@@ -1289,14 +1633,18 @@
           complaintsCount: cleanComplaints.length,
           homeworksCount: cleanHomeworks.length,
           testsCount: cleanTests.length,
-          customSubjectsCount: Object.values(cleanSubjects).reduce((acc, arr) => acc + arr.length, 0)
+          customSubjectsCount: Object.values(cleanSubjects).reduce((acc, arr) => acc + arr.length, 0),
+          classAttendanceCount: cleanClassAttendance.length,
+          prepAttendanceCount: cleanPrepAttendance.length
         },
         sanitizedData: {
           customStudents: cleanCustomStudents,
           complaints: cleanComplaints,
           homeworks: cleanHomeworks,
           tests: cleanTests,
-          customSubjects: cleanSubjects
+          customSubjects: cleanSubjects,
+          classAttendance: cleanClassAttendance,
+          prepAttendance: cleanPrepAttendance
         }
       };
     },
@@ -1364,6 +1712,8 @@
         saveOrThrow(KEYS.HOMEWORKS, clean.homeworks, 'homeworks backup');
         saveOrThrow(KEYS.TESTS, clean.tests, 'monthly tests backup');
         saveOrThrow(KEYS.SUBJECTS, clean.customSubjects, 'custom subjects backup');
+        saveOrThrow(KEYS.CLASS_ATTENDANCE, clean.classAttendance, 'classes attendance backup');
+        saveOrThrow(KEYS.PREP_ATTENDANCE, clean.prepAttendance, 'prep attendance backup');
       } catch (err) {
         restoreStorageSnapshot(preImportSnapshot);
         throw new Error(`Backup import aborted and rolled back cleanly (${err.message})`);
@@ -1375,6 +1725,8 @@
         complaintsCount: clean.complaints.length,
         homeworksCount: clean.homeworks.length,
         testsCount: clean.tests.length,
+        classAttendanceCount: clean.classAttendance.length,
+        prepAttendanceCount: clean.prepAttendance.length,
         recoverySaved: true
       };
     },
