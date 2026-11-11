@@ -1,13 +1,13 @@
 {
-  "name": "Student Complaint Tracker - Hadi Education System",
-  "short_name": "ComplaintTracker",
-  "description": "Offline-capable student complaint and severity tracker with green-to-red visual meter and bilingual Urdu/English support.",
+  "name": "Hadi Education System Portal",
+  "short_name": "Hadi Portal",
+  "description": "Offline-capable school management portal for Hadi Education System Balkassar covering violations, daily homework tracking, monthly tests, and grand student reports.",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#F4F8FA",
+  "background_color": "#F5F7FB",
   "theme_color": "#001B4A",
-  "categories": ["education", "productivity", "utilities"],
+  "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "icons/icon-192.png",

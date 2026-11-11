@@ -47,10 +47,56 @@
     grandSectionFilter: 'ALL',
     grandHwRange: 'all',
 
-    // Pending confirmation callback
+    // Pending confirmation & modal focus restoration
     confirmCallback: null,
-    confirmCancelCallback: null
+    confirmCancelCallback: null,
+    lastFocusedElement: null,
+    lastConfirmTrigger: null
   };
+
+  const SCREEN_META = {
+    home: { title: 'Home Dashboard', subtitle: 'Daily summary & quick academic workflows' },
+    violations: { title: 'Violation Record', subtitle: 'Discipline logging, severity tracking & master register' },
+    homework: { title: 'Homework & Pending Tasks', subtitle: 'Daily assignments, checklists & unclear concept clearance' },
+    tests: { title: 'Monthly Tests', subtitle: 'Assessment boxes, class subjects & validated student marks' },
+    'grand-report': { title: 'Grand Student Report', subtitle: 'Unified student dossier, print profile & guardian contact' }
+  };
+
+  function getFocusableElements(container) {
+    if (!container) return [];
+    const selectors = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled]):not([type="hidden"])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(',');
+    return Array.from(container.querySelectorAll(selectors)).filter((el) => {
+      if (el.hidden || el.closest('[hidden]')) return false;
+      const style = window.getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+  }
+
+  function focusDialogInitialElement(modalEl, targetEl) {
+    if (!modalEl || !targetEl) return;
+    void modalEl.offsetHeight;
+    try { targetEl.focus({ preventScroll: true }); } catch (e) {}
+    requestAnimationFrame(() => {
+      if (modalEl.classList.contains('open') && !modalEl.contains(document.activeElement)) {
+        try { targetEl.focus({ preventScroll: true }); } catch (e) {}
+      }
+    });
+  }
+
+  function restoreTriggerFocus(el) {
+    if (el && typeof el.focus === 'function' && document.contains(el)) {
+      setTimeout(() => {
+        try { el.focus(); } catch (e) {}
+      }, 0);
+    }
+  }
 
   /* ========================================================================
      Utilities & Formatters
@@ -123,6 +169,7 @@
     onConfirm,
     onCancel = null
   }) {
+    state.lastConfirmTrigger = document.activeElement;
     document.getElementById('confirm-title').textContent = title || 'Confirm Action';
     document.getElementById('confirm-msg').textContent = message || 'Are you sure?';
     const detailsEl = document.getElementById('confirm-details');
@@ -140,15 +187,31 @@
     proceedBtn.className = `btn ${confirmBtnClass}`;
     state.confirmCallback = onConfirm;
     state.confirmCancelCallback = onCancel;
-    document.getElementById('confirm-modal').classList.add('open');
+    const modal = document.getElementById('confirm-modal');
+    modal.classList.add('open');
+
+    const cancelBtn = document.getElementById('btn-confirm-cancel');
+    focusDialogInitialElement(modal, cancelBtn);
   }
 
   function closeConfirmDialog(triggerCancel = false) {
     const cancelCb = triggerCancel ? state.confirmCancelCallback : null;
+    const triggerEl = state.lastConfirmTrigger;
     document.getElementById('confirm-modal').classList.remove('open');
     state.confirmCallback = null;
     state.confirmCancelCallback = null;
+    state.lastConfirmTrigger = null;
     if (typeof cancelCb === 'function') cancelCb();
+    restoreTriggerFocus(triggerEl);
+  }
+
+  function closeUtilityMenu(restoreFocus = false) {
+    const btn = document.getElementById('btn-utility-menu');
+    const menu = document.getElementById('utility-menu-dropdown');
+    if (!btn || !menu || menu.hidden) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) btn.focus();
   }
 
   function hasUnsavedTestMarks() {
@@ -181,17 +244,30 @@
       return;
     }
 
+    closeUtilityMenu(false);
     state.currentScreen = screenName;
 
     document.querySelectorAll('.screen').forEach((el) => {
       el.classList.toggle('active', el.id === `screen-${screenName}`);
     });
-    document.querySelectorAll('.desktop-nav .nav-link').forEach((el) => {
-      el.classList.toggle('active', el.dataset.screen === screenName);
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach((el) => {
+      const isCurrent = el.dataset.screen === screenName;
+      el.classList.toggle('active', isCurrent);
+      if (isCurrent) el.setAttribute('aria-current', 'page');
+      else el.removeAttribute('aria-current');
     });
     document.querySelectorAll('.bottom-nav .tab-btn').forEach((el) => {
-      el.classList.toggle('active', el.dataset.screen === screenName);
+      const isCurrent = el.dataset.screen === screenName;
+      el.classList.toggle('active', isCurrent);
+      if (isCurrent) el.setAttribute('aria-current', 'page');
+      else el.removeAttribute('aria-current');
     });
+
+    const meta = SCREEN_META[screenName] || SCREEN_META.home;
+    const titleEl = document.getElementById('topbar-page-title');
+    const subEl = document.getElementById('topbar-page-subtitle');
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subEl) subEl.textContent = meta.subtitle;
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -217,9 +293,33 @@
     document.getElementById('home-stat-pending').textContent = pending.length;
     document.getElementById('home-stat-tests').textContent = tests.length;
 
+    const dateEl = document.getElementById('home-current-date');
+    if (dateEl) {
+      dateEl.textContent = new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+
     document.getElementById('home-violations-tag').textContent = `${complaints.length} Logged`;
     document.getElementById('home-homework-tag').textContent = `${hws.length} HW • ${pending.length} Pending`;
     document.getElementById('home-tests-tag').textContent = `${tests.length} ${tests.length === 1 ? 'Test' : 'Tests'}`;
+    const stuTag = document.getElementById('home-students-tag');
+    if (stuTag) stuTag.textContent = `${roster.length} Student Profiles`;
+
+    const badgeViol = document.getElementById('snav-badge-violations');
+    const badgePend = document.getElementById('snav-badge-pending');
+    const badgeTests = document.getElementById('snav-badge-tests');
+    if (badgeViol) badgeViol.textContent = complaints.length;
+    if (badgePend) badgePend.textContent = pending.length;
+    if (badgeTests) badgeTests.textContent = tests.length;
+
+    const recoverBtn = document.getElementById('btn-restore-recovery');
+    if (recoverBtn) {
+      recoverBtn.hidden = !window.AppStorage.hasRecoverySnapshot();
+    }
   }
 
   /* ========================================================================
@@ -646,6 +746,12 @@
     const s = students.find((x) => x.id === studentId);
     if (!s) return;
 
+    const modalEl = document.getElementById('student-detail-modal');
+    const wasOpen = modalEl.classList.contains('open');
+    if (!wasOpen) {
+      state.lastFocusedElement = document.activeElement;
+    }
+
     state.activeStudentDetailId = studentId;
     document.getElementById('modal-student-name').textContent = s.name;
     document.getElementById('modal-student-meta').textContent = `${s.className} • ${s.totalComplaints} violations • Score: ${s.severityScore}`;
@@ -658,21 +764,22 @@
       </div>
     `;
 
+    const sevPts = (sev) => (window.AppStorage.SEVERITY_CONFIG[sev] ? window.AppStorage.SEVERITY_CONFIG[sev].points : 1);
     document.getElementById('modal-history-list').innerHTML = s.complaints.map((c) => `
       <div class="history-card">
         <div class="history-card-header">
-          <span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span>
+          <span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)} (${escapeHTML(sevPts(c.severity))} pt)</span>
           <span class="history-time">${escapeHTML(formatDateTime(c.createdAt))}</span>
         </div>
         <div class="history-text" dir="auto">${escapeHTML(c.text)}</div>
         <div class="history-footer">
-          <button class="btn btn-outline btn-sm btn-danger btn-del-violation" data-cid="${escapeHTML(c.id)}">Delete</button>
+          <button type="button" class="btn btn-outline btn-sm btn-danger btn-del-violation" data-cid="${escapeHTML(c.id)}">Delete</button>
         </div>
       </div>
     `).join('');
 
     document.getElementById('btn-detail-add-complaint').onclick = async () => {
-      closeViolationDetailModal();
+      closeViolationDetailModal(false);
       switchViolationSubTab('form');
       document.getElementById('input-student-id').value = s.id;
       document.getElementById('input-student-name').value = s.name;
@@ -682,7 +789,7 @@
     };
 
     document.getElementById('btn-detail-open-grand').onclick = () => {
-      closeViolationDetailModal();
+      closeViolationDetailModal(false);
       state.grandClassId = window.AppStorage.normalizeClassId(s.classId);
       state.grandStudentId = s.id;
       switchScreen('grand-report');
@@ -700,7 +807,7 @@
               const res = await window.AppStorage.deleteComplaint(cid);
               if (res.success) {
                 showToast('Violation deleted.', 'success');
-                if (res.studentDeleted) closeViolationDetailModal();
+                if (res.studentDeleted) closeViolationDetailModal(true);
                 else openViolationDetailModal(studentId);
                 await refreshViolationsModule();
                 await updateHomeStats();
@@ -713,12 +820,19 @@
       });
     });
 
-    document.getElementById('student-detail-modal').classList.add('open');
+    modalEl.classList.add('open');
+    if (!wasOpen) {
+      focusDialogInitialElement(modalEl, document.getElementById('modal-close-btn'));
+    }
   }
 
-  function closeViolationDetailModal() {
+  function closeViolationDetailModal(shouldRestoreFocus = true) {
     document.getElementById('student-detail-modal').classList.remove('open');
     state.activeStudentDetailId = null;
+    if (shouldRestoreFocus) {
+      restoreTriggerFocus(state.lastFocusedElement);
+      state.lastFocusedElement = null;
+    }
   }
 
   async function renderViolationMasterSheet() {
@@ -737,6 +851,7 @@
     }
     empty.style.display = 'none';
 
+    const sevPts = (sev) => (window.AppStorage.SEVERITY_CONFIG[sev] ? window.AppStorage.SEVERITY_CONFIG[sev].points : 1);
     let rowsHtml = '';
     let counter = 1;
     const isGrouped = ['severity', 'complaints', 'name', 'class'].includes(state.sortBy);
@@ -753,7 +868,7 @@
       sorted.forEach((s) => {
         rowsHtml += `
           <tr class="student-group-row">
-            <td colspan="7"><strong>${escapeHTML(s.name)}</strong> (${escapeHTML(s.className)}) — ${escapeHTML(s.totalComplaints)} violations | Score: ${escapeHTML(s.severityScore)}/${escapeHTML(window.AppStorage.MAX_SCORE)} (${escapeHTML(s.statusLabel)})</td>
+            <td colspan="7"><strong>${escapeHTML(s.name)}</strong> (${escapeHTML(s.className)}) — ${escapeHTML(s.totalComplaints)} ${s.totalComplaints === 1 ? 'violation' : 'violations'} | Score: ${escapeHTML(s.severityScore)}/${escapeHTML(window.AppStorage.MAX_SCORE)} (${escapeHTML(s.statusLabel)})</td>
           </tr>
         `;
         s.complaints.forEach((c) => {
@@ -763,7 +878,7 @@
               <td><strong>${escapeHTML(s.name)}</strong></td>
               <td>${escapeHTML(s.className)}</td>
               <td class="complaint-cell" dir="auto">${escapeHTML(c.text)}</td>
-              <td><span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span></td>
+              <td><span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)} (${escapeHTML(sevPts(c.severity))} pt)</span></td>
               <td>${escapeHTML(formatDateOnly(c.createdAt))}</td>
               <td>${escapeHTML(formatTimeOnly(c.createdAt))}</td>
             </tr>
@@ -785,7 +900,7 @@
             <td><strong>${escapeHTML(s.name)}</strong></td>
             <td>${escapeHTML(window.AppStorage.getClassLabel(s.classId))}</td>
             <td class="complaint-cell" dir="auto">${escapeHTML(c.text)}</td>
-            <td><span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)}</span></td>
+            <td><span class="sev-chip sev-chip-${escapeHTML(c.severity.toLowerCase())}">${escapeHTML(c.severity)} (${escapeHTML(sevPts(c.severity))} pt)</span></td>
             <td>${escapeHTML(formatDateOnly(c.createdAt))}</td>
             <td>${escapeHTML(formatTimeOnly(c.createdAt))}</td>
           </tr>
@@ -836,11 +951,13 @@
     }
 
     const drawer = document.getElementById('hw-form-drawer');
+    const toggleHeader = document.getElementById('hw-banner-toggle');
     const pill = document.getElementById('hw-toggle-pill');
     const backBtn = document.getElementById('hw-btn-back-edit');
     const saveBtn = document.getElementById('hw-btn-save-all');
 
     drawer.style.display = state.hwFormOpen ? 'block' : 'none';
+    if (toggleHeader) toggleHeader.setAttribute('aria-expanded', state.hwFormOpen ? 'true' : 'false');
     pill.innerHTML = state.hwFormOpen ? 'Close Form &#9652;' : 'Open Form &#9662;';
 
     if (backBtn) backBtn.innerHTML = '&larr; Edit Form';
@@ -894,11 +1011,13 @@
     });
 
     const drawer = document.getElementById('hw-form-drawer');
+    const toggleHeader = document.getElementById('hw-banner-toggle');
     const pill = document.getElementById('hw-toggle-pill');
     const backBtn = document.getElementById('hw-btn-back-edit');
     const saveBtn = document.getElementById('hw-btn-save-all');
 
     drawer.style.display = 'block';
+    if (toggleHeader) toggleHeader.setAttribute('aria-expanded', 'true');
     pill.innerHTML = 'Close Form &#9652;';
     document.getElementById('hw-create-form').style.display = 'none';
     document.getElementById('hw-marking-panel').style.display = 'block';
@@ -946,6 +1065,28 @@
   }
 
   function renderHwDraftRows(students) {
+    const summaryEl = document.getElementById('hw-selection-summary');
+    if (summaryEl) {
+      let doneCnt = 0;
+      let notDoneCnt = 0;
+      let clearCnt = 0;
+      let unclearCnt = 0;
+      students.forEach((s) => {
+        const m = state.hwDraftMarks[s.id] || { hwDone: true, conceptClear: true };
+        if (m.hwDone) doneCnt++;
+        else notDoneCnt++;
+        if (m.conceptClear) clearCnt++;
+        else unclearCnt++;
+      });
+      summaryEl.innerHTML = `
+        <span class="drill-pill drill-pill-blue">Students: ${escapeHTML(students.length)}</span>
+        <span class="drill-pill drill-pill-green">&#10003; Done: ${escapeHTML(doneCnt)}</span>
+        <span class="drill-pill ${notDoneCnt > 0 ? 'drill-pill-red' : ''}">&#10007; Not Done: ${escapeHTML(notDoneCnt)}</span>
+        <span class="drill-pill drill-pill-green">&#9679; Clear: ${escapeHTML(clearCnt)}</span>
+        <span class="drill-pill ${unclearCnt > 0 ? 'drill-pill-amber' : ''}">&#9650; Unclear: ${escapeHTML(unclearCnt)}</span>
+      `;
+    }
+
     const container = document.getElementById('hw-marking-rows');
     container.innerHTML = students.map((s) => {
       const m = state.hwDraftMarks[s.id] || { hwDone: true, conceptClear: true, conceptResolved: false };
@@ -962,12 +1103,12 @@
           </div>
           <div class="hw-stu-toggles">
             <div class="toggle-pair" role="group" aria-label="Homework Status">
-              <button type="button" class="mark-toggle-btn ${m.hwDone ? 'active-tick' : ''}" data-action="hw-done">&#10003; Done</button>
-              <button type="button" class="mark-toggle-btn ${!m.hwDone ? 'active-cross' : ''}" data-action="hw-cross">&#10007; Not Done</button>
+              <button type="button" class="mark-toggle-btn ${m.hwDone ? 'active-tick' : ''}" data-action="hw-done" aria-pressed="${m.hwDone ? 'true' : 'false'}">&#10003; Done</button>
+              <button type="button" class="mark-toggle-btn ${!m.hwDone ? 'active-cross' : ''}" data-action="hw-cross" aria-pressed="${!m.hwDone ? 'true' : 'false'}">&#10007; Not Done</button>
             </div>
             <div class="toggle-pair" role="group" aria-label="Concept Understanding">
-              <button type="button" class="mark-toggle-btn ${m.conceptClear ? 'active-clear' : ''}" data-action="concept-clear">&#128161; Clear</button>
-              <button type="button" class="mark-toggle-btn ${!m.conceptClear ? 'active-unclear' : ''}" data-action="concept-unclear">&#9888; Unclear</button>
+              <button type="button" class="mark-toggle-btn ${m.conceptClear ? 'active-clear' : ''}" data-action="concept-clear" aria-pressed="${m.conceptClear ? 'true' : 'false'}">&#9679; Clear</button>
+              <button type="button" class="mark-toggle-btn ${!m.conceptClear ? 'active-unclear' : ''}" data-action="concept-unclear" aria-pressed="${!m.conceptClear ? 'true' : 'false'}">&#9650; Unclear</button>
             </div>
           </div>
         </div>
@@ -1096,7 +1237,7 @@
             <div class="drill-box-top">
               <div>
                 <div class="drill-box-title">${escapeHTML(c.label)}</div>
-                <div class="drill-box-sub">${escapeHTML(stus.length)} Students &bull; ${escapeHTML(subjects.length)} Subjects</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} ${stus.length === 1 ? 'Student' : 'Students'} &bull; ${escapeHTML(subjects.length)} ${subjects.length === 1 ? 'Subject' : 'Subjects'}</div>
               </div>
               <span class="drill-pill ${clsPending > 0 ? 'drill-pill-amber' : 'drill-pill-blue'}">
                 ${clsPending > 0 ? `${escapeHTML(clsPending)} Pending` : `${escapeHTML(clsHwCount)} HW`}
@@ -1309,9 +1450,21 @@
 
   /* Student Subject Homework Report Modal (with 1d, 7d, 1m, all, custom selector) */
   async function openHwStudentReportModal(studentId) {
+    const modalEl = document.getElementById('hw-student-report-modal');
+    if (!modalEl.classList.contains('open')) {
+      state.lastFocusedElement = document.activeElement;
+    }
     state.hwModalStudentId = studentId;
-    document.getElementById('hw-student-report-modal').classList.add('open');
+    modalEl.classList.add('open');
     await renderHwStudentReportBody();
+    focusDialogInitialElement(modalEl, document.getElementById('hw-modal-close-btn'));
+  }
+
+  function closeHwStudentReportModal() {
+    document.getElementById('hw-student-report-modal').classList.remove('open');
+    state.hwModalStudentId = null;
+    restoreTriggerFocus(state.lastFocusedElement);
+    state.lastFocusedElement = null;
   }
 
   async function renderHwStudentReportBody() {
@@ -1633,7 +1786,7 @@
             <div class="drill-box-top">
               <div>
                 <div class="drill-box-title">${escapeHTML(c.label)}</div>
-                <div class="drill-box-sub">${escapeHTML(stus.length)} Students &bull; ${escapeHTML(subjects.length)} Subjects</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} ${stus.length === 1 ? 'Student' : 'Students'} &bull; ${escapeHTML(subjects.length)} ${subjects.length === 1 ? 'Subject' : 'Subjects'}</div>
               </div>
               <span class="drill-pill ${gradedSubjs > 0 ? 'drill-pill-green' : ''}">${escapeHTML(gradedSubjs)} / ${escapeHTML(subjects.length)} Graded</span>
             </div>
@@ -1729,6 +1882,7 @@
           <div>
             <h3 style="font-size:1.15rem; font-weight:800;">${escapeHTML(state.testSubject)} — ${escapeHTML(window.AppStorage.getClassLabel(state.testClassId))}</h3>
             <p style="font-size:0.82rem; color:var(--text-muted);">${escapeHTML(activeTest.name)} &bull; Enter obtained marks (leave blank if ungraded; enter 0 for zero marks)</p>
+            <span id="tests-unsaved-badge" class="tests-unsaved-badge" aria-live="polite">All changes saved</span>
           </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <div>
@@ -1780,6 +1934,18 @@
     const totalInp = document.getElementById('input-subj-total-marks');
     const dateInp = document.getElementById('input-subj-test-date');
     const valMsgEl = document.getElementById('marks-validation-msg');
+    const dirtyBadgeEl = document.getElementById('tests-unsaved-badge');
+
+    const updateUnsavedBadge = () => {
+      if (!dirtyBadgeEl) return;
+      if (state.testsDirty) {
+        dirtyBadgeEl.className = 'tests-unsaved-badge is-dirty';
+        dirtyBadgeEl.textContent = 'Unsaved edits — click Save Marks';
+      } else {
+        dirtyBadgeEl.className = 'tests-unsaved-badge';
+        dirtyBadgeEl.textContent = 'All changes saved';
+      }
+    };
 
     const validateAndRefreshBadges = () => {
       const rawTot = totalInp.value.trim();
@@ -1829,14 +1995,17 @@
 
     totalInp.addEventListener('input', () => {
       state.testsDirty = true;
+      updateUnsavedBadge();
       validateAndRefreshBadges();
     });
     dateInp.addEventListener('change', () => {
       state.testsDirty = true;
+      updateUnsavedBadge();
     });
     content.querySelectorAll('.marks-num-input').forEach((inp) => {
       inp.addEventListener('input', () => {
         state.testsDirty = true;
+        updateUnsavedBadge();
         validateAndRefreshBadges();
       });
     });
@@ -2008,8 +2177,8 @@
               <span class="drill-pill drill-pill-blue">${escapeHTML(c.badge || '')}</span>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <span class="drill-pill ${clsViolations > 0 ? 'drill-pill-red' : ''}">${escapeHTML(clsViolations)} Violations</span>
-              <span class="drill-pill ${clsPending > 0 ? 'drill-pill-amber' : ''}">${escapeHTML(clsPending)} Pending Tasks</span>
+              <span class="drill-pill ${clsViolations > 0 ? 'drill-pill-red' : ''}">${escapeHTML(clsViolations)} ${clsViolations === 1 ? 'Violation' : 'Violations'}</span>
+              <span class="drill-pill ${clsPending > 0 ? 'drill-pill-amber' : ''}">${escapeHTML(clsPending)} Pending</span>
             </div>
             <div class="drill-box-footer">
               <span>View Student List &rarr;</span>
@@ -2134,7 +2303,7 @@
           <div class="kpi-box">
             <div class="kpi-label">Violation Score</div>
             <div class="kpi-value">${escapeHTML(viol.score)} / ${escapeHTML(window.AppStorage.MAX_SCORE)}</div>
-            <div class="kpi-sub"><span class="status-badge ${escapeHTML(viol.statusClass)}">${escapeHTML(viol.statusLabel)}</span> (${escapeHTML(viol.total)} violations)</div>
+            <div class="kpi-sub"><span class="status-badge ${escapeHTML(viol.statusClass)}">${escapeHTML(viol.statusLabel)}</span> (${escapeHTML(viol.total)} ${viol.total === 1 ? 'violation' : 'violations'})</div>
           </div>
           <div class="kpi-box">
             <div class="kpi-label">Homework Marking</div>
@@ -2215,7 +2384,7 @@
         <!-- 4. Section B: Monthly Test Results -->
         <div class="dossier-section-card">
           <div class="dossier-section-title">
-            <span>Monthly Test Results (${escapeHTML(tst.tests.length)} Tests)</span>
+            <span>Monthly Test Results (${escapeHTML(tst.tests.length)} ${tst.tests.length === 1 ? 'Test' : 'Tests'})</span>
           </div>
           ${tst.tests.length === 0
             ? `<p style="font-size:0.875rem; color:var(--text-muted);">No monthly test marks recorded for this student yet.</p>`
@@ -2423,14 +2592,36 @@
      Bind All Event Listeners
      ======================================================================== */
   function bindEvents() {
-    // Brand & Back to Home
+    // Brand, Sidebar Brand & Back to Home
     const brand = document.getElementById('brand-home-link');
-    brand.addEventListener('click', () => switchScreen('home'));
+    const sideBrand = document.getElementById('sidebar-brand-link');
+    [brand, sideBrand].forEach((el) => {
+      if (!el) return;
+      el.addEventListener('click', () => switchScreen('home'));
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          switchScreen('home');
+        }
+      });
+    });
+
     document.querySelectorAll('.btn-back-home').forEach((b) => {
       b.addEventListener('click', () => switchScreen('home'));
     });
 
-    // Home Curved Boxes
+    // Desktop Collapsible Sidebar Toggle
+    const toggleSidebarBtn = document.getElementById('btn-toggle-sidebar');
+    const sidebarEl = document.getElementById('app-sidebar');
+    if (toggleSidebarBtn && sidebarEl) {
+      toggleSidebarBtn.addEventListener('click', () => {
+        const collapsed = sidebarEl.classList.toggle('collapsed');
+        toggleSidebarBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggleSidebarBtn.setAttribute('aria-label', collapsed ? 'Expand sidebar navigation' : 'Collapse sidebar navigation');
+      });
+    }
+
+    // Home Module Cards & Quick Actions
     document.querySelectorAll('.curved-action-card').forEach((card) => {
       card.addEventListener('click', () => switchScreen(card.dataset.target));
       card.addEventListener('keydown', (e) => {
@@ -2438,16 +2629,130 @@
       });
     });
 
-    // Top Desktop Nav & Mobile Bottom Nav
-    document.querySelectorAll('.desktop-nav .nav-link, .bottom-nav .tab-btn').forEach((btn) => {
+    const qaViol = document.getElementById('qa-log-violation');
+    if (qaViol) {
+      qaViol.addEventListener('click', () => {
+        switchScreen('violations');
+        switchViolationSubTab('form');
+        setTimeout(() => document.getElementById('input-student-name').focus(), 40);
+      });
+    }
+    const qaHw = document.getElementById('qa-add-homework');
+    if (qaHw) {
+      qaHw.addEventListener('click', () => {
+        state.hwMode = 'browse';
+        switchScreen('homework');
+        setTimeout(() => toggleHwFormDrawer(true), 40);
+      });
+    }
+    const qaTest = document.getElementById('qa-create-test');
+    if (qaTest) {
+      qaTest.addEventListener('click', () => {
+        state.testId = null;
+        state.testClassId = null;
+        state.testSubject = null;
+        switchScreen('tests');
+        setTimeout(() => {
+          const trigger = document.getElementById('btn-show-create-test');
+          if (trigger) trigger.click();
+        }, 40);
+      });
+    }
+    const qaGrand = document.getElementById('qa-find-student');
+    if (qaGrand) {
+      qaGrand.addEventListener('click', () => {
+        switchScreen('grand-report');
+        setTimeout(() => {
+          const inp = document.getElementById('grand-student-search');
+          if (inp) inp.focus();
+        }, 40);
+      });
+    }
+
+    // Desktop Sidebar Nav & Mobile Bottom Nav
+    document.querySelectorAll('.sidebar-nav .nav-link, .bottom-nav .tab-btn').forEach((btn) => {
       btn.addEventListener('click', () => switchScreen(btn.dataset.screen));
     });
 
-    // Global Header Actions
-    document.getElementById('btn-export-csv').addEventListener('click', handleExportCsv);
-    document.getElementById('btn-export-backup').addEventListener('click', handleExportBackup);
-    document.getElementById('btn-import-backup').addEventListener('click', () => document.getElementById('file-import-input').click());
+    // Global Utility Menu (CSV, JSON Backup, Import, Recovery Snapshot)
+    const utilityBtn = document.getElementById('btn-utility-menu');
+    const utilityDropdown = document.getElementById('utility-menu-dropdown');
+    const restoreRecoveryBtn = document.getElementById('btn-restore-recovery');
+
+    if (utilityBtn && utilityDropdown) {
+      utilityBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = utilityDropdown.hidden;
+        if (restoreRecoveryBtn) {
+          restoreRecoveryBtn.hidden = !window.AppStorage.hasRecoverySnapshot();
+        }
+        utilityDropdown.hidden = !willOpen;
+        utilityBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        if (willOpen) {
+          const firstItem = utilityDropdown.querySelector('.utility-item:not([hidden])');
+          if (firstItem) setTimeout(() => firstItem.focus(), 10);
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#utility-menu-wrap')) {
+          closeUtilityMenu(false);
+        }
+      });
+    }
+
+    document.getElementById('btn-export-csv').addEventListener('click', () => {
+      closeUtilityMenu(false);
+      handleExportCsv();
+    });
+    document.getElementById('btn-export-backup').addEventListener('click', () => {
+      closeUtilityMenu(false);
+      handleExportBackup();
+    });
+    document.getElementById('btn-import-backup').addEventListener('click', () => {
+      closeUtilityMenu(false);
+      document.getElementById('file-import-input').click();
+    });
     document.getElementById('file-import-input').addEventListener('change', handleFileImportSelected);
+
+    if (restoreRecoveryBtn) {
+      restoreRecoveryBtn.addEventListener('click', () => {
+        closeUtilityMenu(false);
+        openConfirmDialog({
+          title: 'Restore Pre-Import Snapshot?',
+          message: 'Revert portal data back to the automatic snapshot captured right before your last JSON import?',
+          confirmLabel: 'Restore Snapshot',
+          confirmBtnClass: 'btn-primary',
+          onConfirm: async () => {
+            try {
+              await window.AppStorage.restoreRecoverySnapshot();
+              showToast('Pre-import recovery snapshot restored!', 'success');
+              switchScreen(state.currentScreen, true);
+              await updateHomeStats();
+            } catch (err) {
+              showToast(err.message || 'No recovery snapshot available.', 'error');
+            }
+          }
+        });
+      });
+    }
+
+    // Delegated Enter / Space Keyboard Activation for Card Grids & Banners
+    const mainEl = document.getElementById('main-content');
+    if (mainEl) {
+      mainEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const target = e.target;
+        if (!target || target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+        const roleBtn = target.closest('[role="button"]');
+        if (roleBtn && mainEl.contains(roleBtn)) {
+          e.preventDefault();
+          roleBtn.click();
+        }
+      });
+    }
 
     // Violations Sub-Tabs & Form
     document.querySelectorAll('#screen-violations .subtab-btn').forEach((b) => {
@@ -2503,9 +2808,9 @@
     });
 
     // Violation Detail Modal
-    document.getElementById('modal-close-btn').addEventListener('click', closeViolationDetailModal);
+    document.getElementById('modal-close-btn').addEventListener('click', () => closeViolationDetailModal(true));
     document.getElementById('student-detail-modal').addEventListener('click', (e) => {
-      if (e.target.id === 'student-detail-modal') closeViolationDetailModal();
+      if (e.target.id === 'student-detail-modal') closeViolationDetailModal(true);
     });
 
     // Homework Top Box & Form
@@ -2548,11 +2853,9 @@
     document.getElementById('pending-filter-status').addEventListener('change', renderPendingTasksList);
 
     // Homework Student Report Modal Timeframe Pills
-    document.getElementById('hw-modal-close-btn').addEventListener('click', () => {
-      document.getElementById('hw-student-report-modal').classList.remove('open');
-    });
+    document.getElementById('hw-modal-close-btn').addEventListener('click', closeHwStudentReportModal);
     document.getElementById('hw-student-report-modal').addEventListener('click', (e) => {
-      if (e.target.id === 'hw-student-report-modal') e.target.classList.remove('open');
+      if (e.target.id === 'hw-student-report-modal') closeHwStudentReportModal();
     });
     document.querySelectorAll('#hw-timeframe-pills .tf-pill').forEach((pill) => {
       pill.addEventListener('click', () => {
@@ -2622,6 +2925,66 @@
     document.getElementById('confirm-modal').addEventListener('click', (e) => {
       if (e.target.id === 'confirm-modal') closeConfirmDialog(true);
     });
+
+    // Global Dialog Escape & Focus Containment
+    document.addEventListener('keydown', (e) => {
+      const confirmModal = document.getElementById('confirm-modal');
+      const violModal = document.getElementById('student-detail-modal');
+      const hwModal = document.getElementById('hw-student-report-modal');
+      const activeDialog = confirmModal.classList.contains('open')
+        ? confirmModal
+        : violModal.classList.contains('open')
+          ? violModal
+          : hwModal.classList.contains('open')
+            ? hwModal
+            : null;
+
+      if (e.key === 'Escape') {
+        if (confirmModal.classList.contains('open')) {
+          e.preventDefault();
+          closeConfirmDialog(true);
+        } else if (violModal.classList.contains('open')) {
+          e.preventDefault();
+          closeViolationDetailModal(true);
+        } else if (hwModal.classList.contains('open')) {
+          e.preventDefault();
+          closeHwStudentReportModal();
+        } else if (utilityDropdown && !utilityDropdown.hidden) {
+          e.preventDefault();
+          closeUtilityMenu(true);
+        }
+        return;
+      }
+
+      if (e.key === 'Tab' && activeDialog) {
+        const focusable = getFocusableElements(activeDialog);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !activeDialog.contains(document.activeElement))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || !activeDialog.contains(document.activeElement))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    });
+
+    // Service Worker Safe Update Helpers
+    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || !!state.hwFormOpen;
+    window.__hesConfirmAndApplyUpdate = (worker) => {
+      openConfirmDialog({
+        title: 'Apply Portal Update?',
+        message: 'You have an open form or unsaved edits. Save your work first or confirm reloading to apply the updated portal assets.',
+        confirmLabel: 'Reload Update',
+        confirmBtnClass: 'btn-primary',
+        onConfirm: () => {
+          state.testsDirty = false;
+          if (worker) worker.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    };
   }
 
   /* ========================================================================
@@ -2635,6 +2998,14 @@
     bindEvents();
     await updateHomeStats();
     switchScreen('home');
+
+    // Load optional web fonts non-blocking after initial render
+    if (navigator.onLine !== false) {
+      const fontLink = document.createElement('link');
+      fontLink.rel = 'stylesheet';
+      fontLink.href = 'https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap';
+      document.head.appendChild(fontLink);
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
