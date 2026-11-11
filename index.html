@@ -112,6 +112,18 @@
           <span class="nav-count nav-count-violet" id="snav-badge-prep-att">0</span>
         </button>
 
+        <button type="button" class="nav-link" data-screen="health" id="desk-nav-health" title="Health &amp; Medical Records">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21s-7-4.5-9-9.5C1.5 7.5 4.2 4 8 4c2.1 0 3.5 1.1 4 2.2C12.5 5.1 13.9 4 16 4c3.8 0 6.5 3.5 5 7.5-2 5-9 9.5-9 9.5z"/>
+              <path d="M9.5 11.5h5"/>
+              <path d="M12 9v5"/>
+            </svg>
+          </span>
+          <span class="nav-label">Health</span>
+          <span class="nav-count nav-count-rose" id="snav-badge-health">0</span>
+        </button>
+
         <button type="button" class="nav-link" data-screen="tests" id="desk-nav-tests" title="Monthly Tests">
           <span class="nav-icon" aria-hidden="true">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
@@ -319,6 +331,14 @@
                   </svg>
                   <span>Prep Attendance</span>
                 </button>
+                <button type="button" class="qa-pill qa-health" id="qa-health">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                    <path d="M12 21s-7-4.5-9-9.5C1.5 7.5 4.2 4 8 4c2.1 0 3.5 1.1 4 2.2C12.5 5.1 13.9 4 16 4c3.8 0 6.5 3.5 5 7.5-2 5-9 9.5-9 9.5z"/>
+                    <path d="M9.5 11.5h5"/>
+                    <path d="M12 9v5"/>
+                  </svg>
+                  <span>Health</span>
+                </button>
                 <button type="button" class="qa-pill qa-test" id="qa-create-test">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -516,7 +536,32 @@
               </div>
             </div>
 
-            <!-- Card 5: Monthly Tests (Indigo) -->
+            <!-- Card 5: Health & Medical Record (Medical Rose) -->
+            <div class="curved-action-card module-card module-health" data-target="health" id="card-health" tabindex="0" role="button" aria-label="Open Health and Medical Records">
+              <div class="card-accent-strip accent-health"></div>
+              <div class="curved-card-header">
+                <div class="curved-card-icon icon-health" aria-hidden="true">
+                  <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 21s-7-4.5-9-9.5C1.5 7.5 4.2 4 8 4c2.1 0 3.5 1.1 4 2.2C12.5 5.1 13.9 4 16 4c3.8 0 6.5 3.5 5 7.5-2 5-9 9.5-9 9.5z"/>
+                    <path d="M9.5 11.5h5"/>
+                    <path d="M12 9v5"/>
+                  </svg>
+                </div>
+                <span class="card-tag tag-health" id="home-health-tag">0 Visits</span>
+              </div>
+              <div class="curved-card-body">
+                <h3 class="curved-card-title">Health</h3>
+                <p class="curved-card-desc">
+                  Browse Classes 6th–12th by student to inspect complete medical reports, doctor/hospital visits, supervisor details, and log new cases.
+                </p>
+              </div>
+              <div class="curved-card-footer">
+                <span class="card-action-text text-health">View &amp; Log Medical Reports</span>
+                <span class="card-arrow-circle arrow-health" aria-hidden="true">&rarr;</span>
+              </div>
+            </div>
+
+            <!-- Card 6: Monthly Tests (Indigo) -->
             <div class="curved-action-card module-card module-tests" data-target="tests" tabindex="0" role="button" aria-label="Open Monthly Tests">
               <div class="card-accent-strip accent-tests"></div>
               <div class="curved-card-header">
@@ -984,6 +1029,192 @@
         </section>
 
         <!-- ==================================================================
+             SCREEN 2D: HEALTH & MEDICAL RECORDS MODULE
+             ================================================================== -->
+        <section id="screen-health" class="screen" aria-labelledby="health-heading">
+          <div class="screen-top-bar no-print">
+            <button type="button" class="btn-back-home" aria-label="Back to Home">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Home</span>
+            </button>
+            <h2 id="health-heading" class="screen-title">Health &amp; Medical Records</h2>
+          </div>
+
+          <!-- BROWSE / REPORT VIEW -->
+          <div id="health-browse-view">
+            <div class="health-action-strip no-print">
+              <div class="drill-breadcrumb health-bc-inline" id="health-breadcrumb"></div>
+              <button type="button" class="btn btn-health-plus" id="btn-health-open-form" aria-label="Add new medical record">
+                <span class="health-plus-circle" aria-hidden="true">+</span>
+                <span>Add Health Record</span>
+              </button>
+            </div>
+            <div id="health-drill-content"></div>
+          </div>
+
+          <!-- ADD MEDICAL RECORD FORM PAGE (Opened via + button) -->
+          <div id="health-form-view" style="display: none;">
+            <div class="form-card health-form-card">
+              <div class="health-form-topbar">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-health-form-back">&larr; Back</button>
+                <div class="health-form-dt-pill" id="health-readonly-datetime">Loading current date &amp; time...</div>
+              </div>
+
+              <div class="form-header" style="margin-top: 12px;">
+                <h3>New Medical / Health Visit Record</h3>
+                <p>Enter or pick a student name to auto-fill Father Name, Phone Number, and Class from school records. Date and time are recorded automatically.</p>
+              </div>
+
+              <div id="health-form-error-banner" class="form-error-banner hidden" role="alert">
+                <span class="banner-icon" aria-hidden="true">&#9888;</span>
+                <div class="banner-text">
+                  <strong>Could Not Save Medical Record</strong>
+                  <p id="health-error-details"></p>
+                </div>
+              </div>
+
+              <form id="health-record-form" class="complaint-form" novalidate>
+                <input type="hidden" id="health-input-student-id" value="" />
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="health-input-student-name" class="form-label">
+                      Student Name <span class="required-asterisk">*</span>
+                    </label>
+                    <div class="autocomplete-container">
+                      <input
+                        type="text"
+                        id="health-input-student-name"
+                        class="input-control"
+                        placeholder="Type student name or roll #..."
+                        autocomplete="off"
+                        required
+                      />
+                      <div id="health-autocomplete-list" class="autocomplete-dropdown" role="listbox"></div>
+                    </div>
+                    <div id="health-match-status" class="violation-match-status" aria-live="polite"></div>
+                    <div id="val-health-student-name" class="field-validation-msg">Please enter the student's name.</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="health-select-class" class="form-label">
+                      Class of Student <span class="required-asterisk">*</span>
+                    </label>
+                    <select id="health-select-class" class="select-control" required>
+                      <option value="">-- Select Class --</option>
+                    </select>
+                    <div id="val-health-class" class="field-validation-msg">Please select student's class.</div>
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="health-input-father-name" class="form-label">
+                      Father Name (Auto-Filled)
+                    </label>
+                    <input
+                      type="text"
+                      id="health-input-father-name"
+                      class="input-control"
+                      placeholder="Auto-filled from student profile..."
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="health-input-phone" class="form-label">
+                      Parent Phone Number (Auto-Filled)
+                    </label>
+                    <input
+                      type="tel"
+                      id="health-input-phone"
+                      class="input-control"
+                      placeholder="Auto-filled from student profile..."
+                    />
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="health-input-supervisor" class="form-label">
+                      Supervisor Teacher <span class="required-asterisk">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="health-input-supervisor"
+                      class="input-control"
+                      list="health-supervisors-datalist"
+                      placeholder="e.g. Sir Muhammad Ali"
+                      required
+                    />
+                    <datalist id="health-supervisors-datalist"></datalist>
+                    <div id="val-health-supervisor" class="field-validation-msg">Please enter supervisor teacher name.</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="health-input-supervisor-phone" class="form-label">
+                      Supervisor Teacher Number
+                    </label>
+                    <input
+                      type="tel"
+                      id="health-input-supervisor-phone"
+                      class="input-control"
+                      placeholder="e.g. 0300-1234567"
+                    />
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="health-input-doctor" class="form-label">
+                      Doctor Name or Hospital Name <span class="required-asterisk">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="health-input-doctor"
+                      class="input-control"
+                      list="health-doctors-datalist"
+                      placeholder="e.g. Dr. Tariq / THQ Hospital Chakwal"
+                      required
+                    />
+                    <datalist id="health-doctors-datalist"></datalist>
+                    <div id="val-health-doctor" class="field-validation-msg">Please enter doctor name or hospital name.</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Date &amp; Time (Auto-Captured)</label>
+                    <div class="hw-readonly-dt" id="health-form-clock-box">Auto Date &amp; Time</div>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="health-textarea-disease" class="form-label">
+                    What is the Disease / Medical Issue? <span class="required-asterisk">*</span>
+                  </label>
+                  <textarea
+                    id="health-textarea-disease"
+                    class="textarea-control"
+                    dir="auto"
+                    rows="4"
+                    placeholder="Describe symptoms, diagnosis, medicine given, or doctor advice (English, Roman Urdu, or اردو)..."
+                    required
+                  ></textarea>
+                  <div id="val-health-disease" class="field-validation-msg">Please enter disease or health condition details.</div>
+                </div>
+
+                <div class="hw-form-actions">
+                  <button type="button" class="btn btn-outline" id="btn-health-form-cancel">Cancel</button>
+                  <button type="submit" class="btn btn-primary" id="btn-health-form-submit">
+                    Save Medical Report
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================
              SCREEN 3: MONTHLY TESTS MODULE
              ================================================================== -->
         <section id="screen-tests" class="screen" aria-labelledby="tests-heading">
@@ -1145,6 +1376,14 @@
         <polyline points="12 7 12 12 15 15"/>
       </svg>
       <span>Prep Att.</span>
+    </button>
+    <button type="button" class="tab-btn" data-screen="health" id="tab-nav-health">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 21s-7-4.5-9-9.5C1.5 7.5 4.2 4 8 4c2.1 0 3.5 1.1 4 2.2C12.5 5.1 13.9 4 16 4c3.8 0 6.5 3.5 5 7.5-2 5-9 9.5-9 9.5z"/>
+        <path d="M9.5 11.5h5"/>
+        <path d="M12 9v5"/>
+      </svg>
+      <span>Health</span>
     </button>
     <button type="button" class="tab-btn" data-screen="tests" id="tab-nav-tests">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

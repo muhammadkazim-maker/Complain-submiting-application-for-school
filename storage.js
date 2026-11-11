@@ -14,7 +14,8 @@
     TESTS: 'hes_monthly_tests_v2',
     SUBJECTS: 'hes_custom_subjects_v2',
     CLASS_ATTENDANCE: 'hes_class_attendance_v1',
-    PREP_ATTENDANCE: 'hes_prep_attendance_v1'
+    PREP_ATTENDANCE: 'hes_prep_attendance_v1',
+    HEALTH_RECORDS: 'hes_health_records_v1'
   };
 
   const PREP_SLOTS = ['Prep 1', 'Prep 2', 'Prep 3'];
@@ -139,6 +140,71 @@
         records: cleanRecords,
         createdAt: entry.createdAt || nowIso,
         updatedAt: entry.updatedAt || entry.createdAt || nowIso
+      };
+    });
+  }
+
+  function validateHealthImportEntries(rawList, validClasses, validStudentIds) {
+    const seenIds = new Set();
+    return (rawList || []).map((entry, idx) => {
+      if (!isPlainObject(entry)) {
+        throw new Error(`Invalid health record entry at index ${idx}.`);
+      }
+      if (!isValidId(entry.id) || seenIds.has(entry.id.trim())) {
+        throw new Error(`Invalid or duplicate health record ID at index ${idx}.`);
+      }
+      const id = entry.id.trim();
+      seenIds.add(id);
+
+      if (!isValidId(entry.studentId) || !validStudentIds.has(entry.studentId.trim())) {
+        throw new Error(`Health record "${id}" references unknown student ID "${String(entry.studentId)}".`);
+      }
+      const cid = normalizeClassId(entry.classId);
+      if (!validClasses.has(cid)) {
+        throw new Error(`Health record "${id}" has unrecognized class "${String(entry.classId)}".`);
+      }
+
+      const disease = typeof entry.disease === 'string' ? entry.disease.trim() : '';
+      if (!disease || disease.length > 2000) {
+        throw new Error(`Health record "${id}" is missing valid disease details.`);
+      }
+
+      const supervisorTeacher = normalizeText(entry.supervisorTeacher);
+      if (!supervisorTeacher || supervisorTeacher.length > 150) {
+        throw new Error(`Health record "${id}" is missing supervisor teacher name.`);
+      }
+
+      const doctorOrHospital = normalizeText(entry.doctorOrHospital);
+      if (!doctorOrHospital || doctorOrHospital.length > 200) {
+        throw new Error(`Health record "${id}" is missing doctor or hospital name.`);
+      }
+
+      if (!isValidDateString(entry.createdAt)) {
+        throw new Error(`Health record "${id}" has invalid createdAt timestamp.`);
+      }
+
+      let visitDate = typeof entry.visitDate === 'string' ? entry.visitDate.trim() : '';
+      if (visitDate && !isValidYmdDate(visitDate)) {
+        throw new Error(`Health record "${id}" has invalid visitDate "${visitDate}".`);
+      }
+      if (!visitDate) {
+        const dt = new Date(entry.createdAt);
+        visitDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      }
+
+      return {
+        id,
+        studentId: entry.studentId.trim(),
+        studentName: normalizeText(entry.studentName) || '-',
+        classId: cid,
+        fatherName: normalizeText(entry.fatherName) || '-',
+        phone: normalizeText(entry.phone) || '-',
+        supervisorTeacher,
+        supervisorPhone: normalizeText(entry.supervisorPhone) || '-',
+        doctorOrHospital,
+        disease,
+        visitDate,
+        createdAt: entry.createdAt
       };
     });
   }
@@ -1039,6 +1105,9 @@
       // 4. Classes Attendance & Prep Attendance
       const attendance = await this.getStudentAttendanceSummary(studentId);
 
+      // 5. Health & Medical Records
+      const health = await this.getStudentHealthSummary(studentId);
+
       return {
         student: {
           ...student,
@@ -1060,7 +1129,8 @@
           resolvedTasks
         },
         tests: testResults,
-        attendance
+        attendance,
+        health
       };
     },
 
@@ -1237,6 +1307,182 @@
     },
 
     /* ========================================================================
+       Health & Medical Records Module
+       ======================================================================== */
+    async getHealthRecords(filter = {}) {
+      const all = load(KEYS.HEALTH_RECORDS, []);
+      if (!Array.isArray(all)) return [];
+      const cid = filter.classId ? normalizeClassId(filter.classId) : '';
+      const sid = filter.studentId ? String(filter.studentId).trim() : '';
+
+      return all
+        .filter((rec) => {
+          if (cid && normalizeClassId(rec.classId) !== cid) return false;
+          if (sid && rec.studentId !== sid) return false;
+          return true;
+        })
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    },
+
+    async getKnownHealthMeta() {
+      const all = await this.getHealthRecords();
+      const supervisorsMap = new Map();
+      const doctorsSet = new Set();
+
+      all.forEach((r) => {
+        const sup = normalizeText(r.supervisorTeacher);
+        const supPhone = normalizeText(r.supervisorPhone);
+        if (sup) {
+          const key = sup.toLowerCase();
+          if (!supervisorsMap.has(key) || (supPhone && supPhone !== '-')) {
+            supervisorsMap.set(key, { name: sup, phone: supPhone && supPhone !== '-' ? supPhone : '' });
+          }
+        }
+        const doc = normalizeText(r.doctorOrHospital);
+        if (doc) doctorsSet.add(doc);
+      });
+
+      return {
+        supervisors: Array.from(supervisorsMap.values()),
+        doctors: Array.from(doctorsSet)
+      };
+    },
+
+    async addHealthRecord({
+      studentId = null,
+      studentName,
+      classId,
+      className,
+      fatherName = '',
+      phone = '',
+      supervisorTeacher,
+      supervisorPhone = '',
+      doctorOrHospital,
+      disease,
+      allowCreateCustom = false
+    }) {
+      const cleanName = normalizeText(studentName);
+      const cid = normalizeClassId(classId || className);
+      const validClasses = new Set(this.getClasses().map((c) => normalizeClassId(c.id)));
+      const cleanSupervisor = normalizeText(supervisorTeacher);
+      const cleanSupPhone = normalizeText(supervisorPhone);
+      const cleanDoctor = normalizeText(doctorOrHospital);
+      const cleanDisease = (disease || '').trim();
+
+      if (!cid || !validClasses.has(cid)) throw new Error('Class of student is required.');
+      if (!cleanSupervisor) throw new Error('Supervisor teacher name is required.');
+      if (!cleanDoctor) throw new Error('Doctor name or hospital name is required.');
+      if (!cleanDisease) throw new Error('Disease / medical issue details are required.');
+
+      const roster = await this.getAllRosterStudents();
+      let student = null;
+
+      if (studentId) {
+        student = roster.find((s) => s.id === studentId) || null;
+        if (!student) {
+          throw new Error('Selected student was not found in the roster. Please re-select the student.');
+        }
+        if (normalizeClassId(student.classId || student.className) !== cid) {
+          throw new Error(`Selected student belongs to ${this.getClassLabel(student.classId || student.className)}, not ${this.getClassLabel(cid)}. Please re-select.`);
+        }
+      } else {
+        if (!cleanName) throw new Error('Student name is required.');
+        const targetKey = getStudentKey(cleanName, cid);
+        const matches = roster.filter((s) => getStudentKey(s.name, s.classId || s.className) === targetKey);
+        if (matches.length > 1) {
+          throw new Error('Multiple students share this name in the selected class. Please pick the exact student from suggestions.');
+        }
+        if (matches.length === 1) {
+          student = matches[0];
+        }
+      }
+
+      const prevCustomRaw = (() => {
+        try { return localStorage.getItem(KEYS.CUSTOM_STUDENTS); } catch (e) { return null; }
+      })();
+      let createdCustomStudent = false;
+
+      const resolvedFatherInput = normalizeText(fatherName);
+      const resolvedPhoneInput = normalizeText(phone);
+
+      if (!student) {
+        if (!allowCreateCustom) {
+          throw new Error('Student not matched in roster. Please pick a suggested student or confirm creating a new student record.');
+        }
+        if (!cleanName) throw new Error('Student name is required.');
+        const customStudents = load(KEYS.CUSTOM_STUDENTS, []);
+        student = {
+          id: generateId('std'),
+          name: cleanName,
+          rollNumber: '-',
+          classId: cid,
+          className: cid,
+          section: 'Custom',
+          family: resolvedFatherInput || '-',
+          phone: resolvedPhoneInput || '-',
+          whatsapp: resolvedPhoneInput || '-',
+          isOfficial: false,
+          createdAt: new Date().toISOString()
+        };
+        customStudents.push(student);
+        saveOrThrow(KEYS.CUSTOM_STUDENTS, customStudents, 'custom student');
+        createdCustomStudent = true;
+      }
+
+      const finalFather = resolvedFatherInput || normalizeText(student.family) || '-';
+      const finalPhone = resolvedPhoneInput || normalizeText(student.phone || student.whatsapp) || '-';
+      const now = new Date();
+      const visitDate = getLocalTodayDate();
+
+      const all = load(KEYS.HEALTH_RECORDS, []);
+      const nextList = Array.isArray(all) ? [...all] : [];
+      const newRecord = {
+        id: generateId('hlth'),
+        studentId: student.id,
+        studentName: student.name,
+        classId: cid,
+        fatherName: finalFather,
+        phone: finalPhone,
+        supervisorTeacher: cleanSupervisor,
+        supervisorPhone: cleanSupPhone || '-',
+        doctorOrHospital: cleanDoctor,
+        disease: cleanDisease,
+        visitDate,
+        createdAt: now.toISOString()
+      };
+      nextList.unshift(newRecord);
+
+      try {
+        saveOrThrow(KEYS.HEALTH_RECORDS, nextList, 'medical health record');
+      } catch (err) {
+        if (createdCustomStudent) {
+          restoreStorageSnapshot({ [KEYS.CUSTOM_STUDENTS]: prevCustomRaw });
+        }
+        throw err;
+      }
+
+      this._notifyChange();
+      return { student, record: newRecord };
+    },
+
+    async deleteHealthRecord(recordId) {
+      const all = load(KEYS.HEALTH_RECORDS, []);
+      const filtered = (Array.isArray(all) ? all : []).filter((r) => r.id !== recordId);
+      saveOrThrow(KEYS.HEALTH_RECORDS, filtered, 'medical record delete');
+      this._notifyChange();
+      return true;
+    },
+
+    async getStudentHealthSummary(studentId) {
+      const list = await this.getHealthRecords({ studentId });
+      return {
+        list,
+        total: list.length,
+        latest: list.length > 0 ? list[0] : null
+      };
+    },
+
+    /* ========================================================================
        Export CSV & Full JSON Backup / Restore
        ======================================================================== */
     async exportCSV() {
@@ -1277,7 +1523,8 @@
         tests: load(KEYS.TESTS, []),
         customSubjects: load(KEYS.SUBJECTS, {}),
         classAttendance: load(KEYS.CLASS_ATTENDANCE, []),
-        prepAttendance: load(KEYS.PREP_ATTENDANCE, [])
+        prepAttendance: load(KEYS.PREP_ATTENDANCE, []),
+        healthRecords: load(KEYS.HEALTH_RECORDS, [])
       };
     },
 
@@ -1311,7 +1558,8 @@
         'tests',
         'customSubjects',
         'classAttendance',
-        'prepAttendance'
+        'prepAttendance',
+        'healthRecords'
       ].some((k) => Object.prototype.hasOwnProperty.call(data, k));
       if (!hasAnySection) {
         throw new Error('Empty or invalid backup: no recognized portal data sections found.');
@@ -1337,6 +1585,9 @@
       }
       if (data.prepAttendance !== undefined && !Array.isArray(data.prepAttendance)) {
         throw new Error('Invalid backup: "prepAttendance" must be an array.');
+      }
+      if (data.healthRecords !== undefined && !Array.isArray(data.healthRecords)) {
+        throw new Error('Invalid backup: "healthRecords" must be an array.');
       }
 
       const validClasses = new Set(this.getClasses().map((c) => normalizeClassId(c.id)));
@@ -1611,6 +1862,12 @@
         validStudentIds
       );
 
+      const cleanHealthRecords = validateHealthImportEntries(
+        data.healthRecords || [],
+        validClasses,
+        validStudentIds
+      );
+
       const subjClassesCount = Object.keys(cleanSubjects).length;
       const totalItems =
         cleanCustomStudents.length +
@@ -1619,7 +1876,8 @@
         cleanTests.length +
         subjClassesCount +
         cleanClassAttendance.length +
-        cleanPrepAttendance.length;
+        cleanPrepAttendance.length +
+        cleanHealthRecords.length;
       if (totalItems === 0) {
         throw new Error('Backup contains 0 records. Empty backups are rejected to protect existing data.');
       }
@@ -1635,7 +1893,8 @@
           testsCount: cleanTests.length,
           customSubjectsCount: Object.values(cleanSubjects).reduce((acc, arr) => acc + arr.length, 0),
           classAttendanceCount: cleanClassAttendance.length,
-          prepAttendanceCount: cleanPrepAttendance.length
+          prepAttendanceCount: cleanPrepAttendance.length,
+          healthRecordsCount: cleanHealthRecords.length
         },
         sanitizedData: {
           customStudents: cleanCustomStudents,
@@ -1644,7 +1903,8 @@
           tests: cleanTests,
           customSubjects: cleanSubjects,
           classAttendance: cleanClassAttendance,
-          prepAttendance: cleanPrepAttendance
+          prepAttendance: cleanPrepAttendance,
+          healthRecords: cleanHealthRecords
         }
       };
     },
@@ -1714,6 +1974,7 @@
         saveOrThrow(KEYS.SUBJECTS, clean.customSubjects, 'custom subjects backup');
         saveOrThrow(KEYS.CLASS_ATTENDANCE, clean.classAttendance, 'classes attendance backup');
         saveOrThrow(KEYS.PREP_ATTENDANCE, clean.prepAttendance, 'prep attendance backup');
+        saveOrThrow(KEYS.HEALTH_RECORDS, clean.healthRecords, 'health records backup');
       } catch (err) {
         restoreStorageSnapshot(preImportSnapshot);
         throw new Error(`Backup import aborted and rolled back cleanly (${err.message})`);
@@ -1727,6 +1988,7 @@
         testsCount: clean.tests.length,
         classAttendanceCount: clean.classAttendance.length,
         prepAttendanceCount: clean.prepAttendance.length,
+        healthRecordsCount: clean.healthRecords.length,
         recoverySaved: true
       };
     },

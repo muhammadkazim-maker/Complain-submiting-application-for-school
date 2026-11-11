@@ -48,6 +48,15 @@
     paDraftRecords: {}, // studentId -> 'Present' | 'Absent' | 'Leave'
     paDirty: false,
 
+    // Health & Medical Records module
+    healthClassId: null,
+    healthStudentId: null,
+    healthSearch: '',
+    healthSearchComposing: false,
+    healthSectionFilter: 'ALL',
+    healthFormOpen: false,
+    healthDirty: false,
+
     // Monthly Tests module
     testId: null,
     testClassId: null,
@@ -76,6 +85,7 @@
     homework: { title: 'Homework & Pending Tasks', subtitle: 'Daily assignments, checklists & unclear concept clearance' },
     'class-attendance': { title: 'Classes Attendance', subtitle: 'Classes 6th–12th subject-wise attendance roll call' },
     'prep-attendance': { title: 'Prep Attendance', subtitle: 'Classes 6th–12th Prep 1, Prep 2 & Prep 3 attendance' },
+    health: { title: 'Health & Medical Records', subtitle: 'Student medical reports, doctor/hospital visits & supervisor details' },
     tests: { title: 'Monthly Tests', subtitle: 'Assessment boxes, class subjects & validated student marks' },
     'grand-report': { title: 'Grand Student Report', subtitle: 'Unified student dossier, print profile & guardian contact' }
   };
@@ -244,6 +254,10 @@
     return classDirty || prepDirty;
   }
 
+  function hasUnsavedHealthForm() {
+    return state.currentScreen === 'health' && !!state.healthFormOpen && !!state.healthDirty;
+  }
+
   function guardUnsavedPortalEdits(proceedCallback, cancelCallback = null) {
     if (hasUnsavedTestMarks()) {
       openConfirmDialog({
@@ -274,6 +288,21 @@
       });
       return;
     }
+    if (hasUnsavedHealthForm()) {
+      openConfirmDialog({
+        title: 'Unsaved Medical Form',
+        message: 'You have unsaved details in the medical record form. Discard this entry and continue?',
+        confirmLabel: 'Discard Form',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: () => {
+          state.healthDirty = false;
+          state.healthFormOpen = false;
+          proceedCallback();
+        },
+        onCancel: cancelCallback
+      });
+      return;
+    }
     proceedCallback();
   }
 
@@ -285,7 +314,11 @@
      Navigation Controller
      ======================================================================== */
   function switchScreen(screenName, bypassDirtyCheck = false) {
-    if (!bypassDirtyCheck && screenName !== state.currentScreen && (hasUnsavedTestMarks() || hasUnsavedAttendance())) {
+    if (
+      !bypassDirtyCheck &&
+      screenName !== state.currentScreen &&
+      (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm())
+    ) {
       guardUnsavedPortalEdits(() => switchScreen(screenName, true));
       return;
     }
@@ -322,6 +355,7 @@
     else if (screenName === 'homework') refreshHomeworkModule();
     else if (screenName === 'class-attendance') refreshAttendanceModule('class');
     else if (screenName === 'prep-attendance') refreshAttendanceModule('prep');
+    else if (screenName === 'health') refreshHealthModule();
     else if (screenName === 'tests') refreshTestsModule();
     else if (screenName === 'grand-report') refreshGrandReportModule();
   }
@@ -337,6 +371,7 @@
     const hws = await window.AppStorage.getHomeworks();
     const classAttList = await window.AppStorage.getClassAttendance();
     const prepAttList = await window.AppStorage.getPrepAttendance();
+    const healthList = await window.AppStorage.getHealthRecords();
     const todayStr = window.AppStorage.getLocalTodayDate();
     const classAttToday = classAttList.filter((e) => e.date === todayStr).length;
     const prepAttToday = prepAttList.filter((e) => e.date === todayStr).length;
@@ -371,6 +406,10 @@
         ? `${prepAttList.length} Saved • Prep 1–3`
         : 'Prep 1 • 2 • 3';
     }
+    const healthTag = document.getElementById('home-health-tag');
+    if (healthTag) {
+      healthTag.textContent = `${healthList.length} ${healthList.length === 1 ? 'Visit' : 'Visits'}`;
+    }
     const stuTag = document.getElementById('home-students-tag');
     if (stuTag) stuTag.textContent = `${roster.length} Student Profiles`;
 
@@ -379,11 +418,13 @@
     const badgeTests = document.getElementById('snav-badge-tests');
     const badgeClassAtt = document.getElementById('snav-badge-class-att');
     const badgePrepAtt = document.getElementById('snav-badge-prep-att');
+    const badgeHealth = document.getElementById('snav-badge-health');
     if (badgeViol) badgeViol.textContent = complaints.length;
     if (badgePend) badgePend.textContent = pending.length;
     if (badgeTests) badgeTests.textContent = tests.length;
     if (badgeClassAtt) badgeClassAtt.textContent = classAttToday;
     if (badgePrepAtt) badgePrepAtt.textContent = prepAttToday;
+    if (badgeHealth) badgeHealth.textContent = healthList.length;
 
     const recoverBtn = document.getElementById('btn-restore-recovery');
     if (recoverBtn) {
@@ -422,6 +463,7 @@
   function populateClassDropdowns() {
     const classes = window.AppStorage.getClasses();
     const formSelect = document.getElementById('select-class');
+    const healthSelect = document.getElementById('health-select-class');
     const filterSelect = document.getElementById('filter-class');
     const hwSelect = document.getElementById('hw-select-class');
     const pendingFilter = document.getElementById('pending-filter-class');
@@ -429,6 +471,7 @@
     const optsHtml = classes.map((c) => `<option value="${escapeHTML(c.id)}">${escapeHTML(c.label)}</option>`).join('');
 
     formSelect.innerHTML = '<option value="">-- Select Class --</option>' + optsHtml;
+    if (healthSelect) healthSelect.innerHTML = '<option value="">-- Select Class --</option>' + optsHtml;
     filterSelect.innerHTML = '<option value="ALL">All Classes</option>' + optsHtml;
     hwSelect.innerHTML = optsHtml;
     pendingFilter.innerHTML = '<option value="ALL">All Classes</option>' + optsHtml;
@@ -991,8 +1034,12 @@
       const txt = `${dayName} • ${dateStr} • ${timeStr}`;
       const el1 = document.getElementById('hw-live-datetime');
       const el2 = document.getElementById('hw-form-readonly-dt');
+      const hel1 = document.getElementById('health-readonly-datetime');
+      const hel2 = document.getElementById('health-form-clock-box');
       if (el1) el1.textContent = txt;
       if (el2) el2.textContent = txt;
+      if (hel1) hel1.textContent = txt;
+      if (hel2) hel2.textContent = txt;
     };
     updateClock();
     setInterval(updateClock, 1000);
@@ -2223,6 +2270,728 @@
   }
 
   /* ========================================================================
+     MODULE 2D: Health & Medical Records
+     ======================================================================== */
+  let healthKnownSupervisors = [];
+
+  function clearHealthFormErrors() {
+    ['val-health-student-name', 'val-health-class', 'val-health-supervisor', 'val-health-doctor', 'val-health-disease'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    ['health-input-student-name', 'health-select-class', 'health-input-supervisor', 'health-input-doctor', 'health-textarea-disease'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('is-invalid');
+    });
+    const errBanner = document.getElementById('health-form-error-banner');
+    if (errBanner) errBanner.classList.add('hidden');
+  }
+
+  function applyHealthStudentPrefill(stu) {
+    const idInp = document.getElementById('health-input-student-id');
+    const nameInp = document.getElementById('health-input-student-name');
+    const classSel = document.getElementById('health-select-class');
+    const fatherInp = document.getElementById('health-input-father-name');
+    const phoneInp = document.getElementById('health-input-phone');
+    const statusEl = document.getElementById('health-match-status');
+    if (!stu) return;
+
+    if (idInp) idInp.value = stu.id;
+    if (nameInp) nameInp.value = stu.name;
+    if (classSel) classSel.value = window.AppStorage.normalizeClassId(stu.classId || stu.className);
+    if (fatherInp) {
+      fatherInp.value = stu.family && stu.family !== '-' ? stu.family : '';
+      fatherInp.dataset.autofilled = 'true';
+    }
+    if (phoneInp) {
+      const num = (stu.phone && stu.phone !== '-') ? stu.phone : ((stu.whatsapp && stu.whatsapp !== '-') ? stu.whatsapp : '');
+      phoneInp.value = num;
+      phoneInp.dataset.autofilled = 'true';
+    }
+    if (statusEl) {
+      statusEl.className = 'violation-match-status matched';
+      statusEl.textContent = `Auto-filled Father Name & Phone for ${stu.name} (${window.AppStorage.getClassLabel(stu.classId || stu.className)} • Roll #${stu.rollNumber || '-'})`;
+    }
+    ['val-health-student-name', 'val-health-class'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+    if (nameInp) nameInp.classList.remove('is-invalid');
+    if (classSel) classSel.classList.remove('is-invalid');
+  }
+
+  async function refreshHealthKnownDatalists() {
+    const meta = await window.AppStorage.getKnownHealthMeta();
+    healthKnownSupervisors = meta.supervisors || [];
+    const supList = document.getElementById('health-supervisors-datalist');
+    const docList = document.getElementById('health-doctors-datalist');
+    if (supList) {
+      supList.innerHTML = healthKnownSupervisors.map((s) => `<option value="${escapeHTML(s.name)}">`).join('');
+    }
+    if (docList) {
+      docList.innerHTML = (meta.doctors || []).map((d) => `<option value="${escapeHTML(d)}">`).join('');
+    }
+  }
+
+  async function updateHealthMatchStatus(autoFillSingleExact = false) {
+    const statusEl = document.getElementById('health-match-status');
+    const idInp = document.getElementById('health-input-student-id');
+    const nameInp = document.getElementById('health-input-student-name');
+    const classSel = document.getElementById('health-select-class');
+    const fatherInp = document.getElementById('health-input-father-name');
+    const phoneInp = document.getElementById('health-input-phone');
+    if (!statusEl || !idInp || !nameInp || !classSel) return;
+
+    const sid = idInp.value.trim();
+    const typedName = nameInp.value.trim();
+    const cid = classSel.value ? window.AppStorage.normalizeClassId(classSel.value) : '';
+
+    if (sid) {
+      const stu = await window.AppStorage.getStudentById(sid);
+      const stuCid = stu ? window.AppStorage.normalizeClassId(stu.classId || stu.className) : '';
+      if (stu && (!cid || stuCid === cid)) {
+        statusEl.className = 'violation-match-status matched';
+        statusEl.textContent = `Auto-filled Father Name & Phone for ${stu.name} (${window.AppStorage.getClassLabel(stuCid)} • Roll #${stu.rollNumber || '-'})`;
+        return;
+      }
+      idInp.value = '';
+    }
+
+    if (!typedName) {
+      if (fatherInp && fatherInp.dataset.autofilled === 'true') fatherInp.value = '';
+      if (phoneInp && phoneInp.dataset.autofilled === 'true') phoneInp.value = '';
+      statusEl.className = 'violation-match-status';
+      statusEl.textContent = 'Type student name or select from suggestions to auto-fill Father Name & Phone.';
+      return;
+    }
+
+    const roster = await window.AppStorage.getAllRosterStudents();
+    const normTyped = window.AppStorage.normalizeText(typedName).toLowerCase();
+    const exactSameClass = cid
+      ? roster.filter((s) => window.AppStorage.normalizeText(s.name).toLowerCase() === normTyped && window.AppStorage.normalizeClassId(s.classId || s.className) === cid)
+      : roster.filter((s) => window.AppStorage.normalizeText(s.name).toLowerCase() === normTyped);
+
+    if (exactSameClass.length === 1) {
+      if (autoFillSingleExact) {
+        applyHealthStudentPrefill(exactSameClass[0]);
+      } else {
+        statusEl.className = 'violation-match-status unmatched';
+        statusEl.textContent = `Matches ${exactSameClass[0].name} (Roll #${exactSameClass[0].rollNumber || '-'}) — pick suggestion or select class to auto-fill.`;
+      }
+    } else if (exactSameClass.length > 1) {
+      statusEl.className = 'violation-match-status unmatched';
+      statusEl.textContent = `Multiple students share the name "${typedName}" — pick the exact student from suggestions.`;
+    } else {
+      if (fatherInp && fatherInp.dataset.autofilled === 'true') {
+        fatherInp.value = '';
+        delete fatherInp.dataset.autofilled;
+      }
+      if (phoneInp && phoneInp.dataset.autofilled === 'true') {
+        phoneInp.value = '';
+        delete phoneInp.dataset.autofilled;
+      }
+      statusEl.className = 'violation-match-status';
+      statusEl.textContent = 'Pick a suggested student or fill details for a new custom student record.';
+    }
+  }
+
+  async function handleHealthNameInput(e) {
+    state.healthDirty = true;
+    const val = e.target.value.trim().toLowerCase();
+    document.getElementById('health-input-student-id').value = '';
+    document.getElementById('val-health-student-name').classList.remove('visible');
+    e.target.classList.remove('is-invalid');
+    const errBanner = document.getElementById('health-form-error-banner');
+    if (errBanner) errBanner.classList.add('hidden');
+
+    const dropdown = document.getElementById('health-autocomplete-list');
+    if (!val) {
+      dropdown.classList.remove('show');
+      dropdown.innerHTML = '';
+      await updateHealthMatchStatus(false);
+      return;
+    }
+
+    const chosenCid = document.getElementById('health-select-class').value;
+    const roster = await window.AppStorage.getAllRosterStudents();
+    const matches = roster
+      .filter((s) => s.name.toLowerCase().includes(val) || (s.rollNumber && s.rollNumber.toString().includes(val)))
+      .sort((a, b) => {
+        if (!chosenCid) return 0;
+        const aMatch = window.AppStorage.normalizeClassId(a.classId || a.className) === chosenCid ? 0 : 1;
+        const bMatch = window.AppStorage.normalizeClassId(b.classId || b.className) === chosenCid ? 0 : 1;
+        return aMatch - bMatch;
+      })
+      .slice(0, 15);
+
+    if (matches.length === 0) {
+      dropdown.classList.remove('show');
+      dropdown.innerHTML = '';
+      await updateHealthMatchStatus(false);
+      return;
+    }
+
+    dropdown.innerHTML = matches.map((s) => `
+      <div class="autocomplete-item" data-id="${escapeHTML(s.id)}">
+        <div>
+          <strong>${escapeHTML(s.name)}</strong>
+          <small style="color:var(--text-muted); margin-left:6px;">#${escapeHTML(s.rollNumber || '-')} &bull; Father: ${escapeHTML(s.family || '-')}</small>
+        </div>
+        <span class="drill-pill drill-pill-blue">${escapeHTML(window.AppStorage.getClassLabel(s.classId))}</span>
+      </div>
+    `).join('');
+    dropdown.classList.add('show');
+    await updateHealthMatchStatus(true);
+  }
+
+  async function handleHealthAutocompletePick(e) {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    const stu = await window.AppStorage.getStudentById(item.dataset.id);
+    if (!stu) return;
+
+    state.healthDirty = true;
+    applyHealthStudentPrefill(stu);
+    document.getElementById('health-autocomplete-list').classList.remove('show');
+    document.getElementById('health-input-supervisor').focus();
+  }
+
+  async function openHealthFormPage(prefillStudentId = null, prefillClassId = null) {
+    state.healthFormOpen = true;
+    state.healthDirty = false;
+    clearHealthFormErrors();
+
+    const form = document.getElementById('health-record-form');
+    if (form) form.reset();
+    document.getElementById('health-input-student-id').value = '';
+    const dropdown = document.getElementById('health-autocomplete-list');
+    if (dropdown) {
+      dropdown.classList.remove('show');
+      dropdown.innerHTML = '';
+    }
+    const fatherInp = document.getElementById('health-input-father-name');
+    const phoneInp = document.getElementById('health-input-phone');
+    const supPhoneInp = document.getElementById('health-input-supervisor-phone');
+    if (fatherInp) delete fatherInp.dataset.autofilled;
+    if (phoneInp) delete phoneInp.dataset.autofilled;
+    if (supPhoneInp) delete supPhoneInp.dataset.autofilled;
+
+    await refreshHealthKnownDatalists();
+
+    const stuId = prefillStudentId !== null ? prefillStudentId : state.healthStudentId;
+    const clsId = prefillClassId !== null ? prefillClassId : state.healthClassId;
+
+    if (stuId) {
+      const stu = await window.AppStorage.getStudentById(stuId);
+      if (stu) applyHealthStudentPrefill(stu);
+    } else if (clsId) {
+      document.getElementById('health-select-class').value = clsId;
+      await updateHealthMatchStatus(false);
+    } else {
+      await updateHealthMatchStatus(false);
+    }
+
+    await refreshHealthModule();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      if (stuId) document.getElementById('health-input-supervisor').focus();
+      else document.getElementById('health-input-student-name').focus();
+    }, 30);
+  }
+
+  function closeHealthFormPage(bypassDirtyCheck = false) {
+    if (!bypassDirtyCheck && hasUnsavedHealthForm()) {
+      guardUnsavedPortalEdits(() => closeHealthFormPage(true));
+      return;
+    }
+    state.healthFormOpen = false;
+    state.healthDirty = false;
+    clearHealthFormErrors();
+    refreshHealthModule();
+  }
+
+  async function executeHealthSave({ resolvedStudentId = null, allowCreateCustom = false }) {
+    const nameInp = document.getElementById('health-input-student-name');
+    const classSel = document.getElementById('health-select-class');
+    const fatherInp = document.getElementById('health-input-father-name');
+    const phoneInp = document.getElementById('health-input-phone');
+    const supInp = document.getElementById('health-input-supervisor');
+    const supPhoneInp = document.getElementById('health-input-supervisor-phone');
+    const docInp = document.getElementById('health-input-doctor');
+    const diseaseArea = document.getElementById('health-textarea-disease');
+    const errBanner = document.getElementById('health-form-error-banner');
+
+    try {
+      const res = await window.AppStorage.addHealthRecord({
+        studentId: resolvedStudentId,
+        studentName: nameInp.value.trim(),
+        classId: classSel.value,
+        fatherName: fatherInp.value.trim(),
+        phone: phoneInp.value.trim(),
+        supervisorTeacher: supInp.value.trim(),
+        supervisorPhone: supPhoneInp.value.trim(),
+        doctorOrHospital: docInp.value.trim(),
+        disease: diseaseArea.value.trim(),
+        allowCreateCustom
+      });
+
+      if (errBanner) errBanner.classList.add('hidden');
+      state.healthFormOpen = false;
+      state.healthDirty = false;
+      state.healthClassId = res.student.classId;
+      state.healthStudentId = res.student.id;
+      document.getElementById('health-record-form').reset();
+      document.getElementById('health-input-student-id').value = '';
+
+      showToast(`Medical record saved for ${res.student.name} at ${formatTimeOnly(res.record.createdAt)}!`, 'success');
+      await refreshHealthModule();
+      await updateHomeStats();
+    } catch (err) {
+      if (errBanner) {
+        document.getElementById('health-error-details').textContent = err.message || 'Unable to save medical record.';
+        errBanner.classList.remove('hidden');
+      }
+      showToast(err.message || 'Unable to save medical record.', 'error', 5000);
+    }
+  }
+
+  async function handleHealthFormSubmit(e) {
+    e.preventDefault();
+    clearHealthFormErrors();
+
+    const idInp = document.getElementById('health-input-student-id');
+    const nameInp = document.getElementById('health-input-student-name');
+    const classSel = document.getElementById('health-select-class');
+    const supInp = document.getElementById('health-input-supervisor');
+    const docInp = document.getElementById('health-input-doctor');
+    const diseaseArea = document.getElementById('health-textarea-disease');
+
+    const studentName = nameInp.value.trim();
+    const classId = classSel.value;
+    const supervisor = supInp.value.trim();
+    const doctor = docInp.value.trim();
+    const disease = diseaseArea.value.trim();
+
+    let firstInvalid = null;
+    if (!studentName) {
+      nameInp.classList.add('is-invalid');
+      document.getElementById('val-health-student-name').classList.add('visible');
+      firstInvalid = firstInvalid || nameInp;
+    }
+    if (!classId) {
+      classSel.classList.add('is-invalid');
+      document.getElementById('val-health-class').classList.add('visible');
+      firstInvalid = firstInvalid || classSel;
+    }
+    if (!supervisor) {
+      supInp.classList.add('is-invalid');
+      document.getElementById('val-health-supervisor').classList.add('visible');
+      firstInvalid = firstInvalid || supInp;
+    }
+    if (!doctor) {
+      docInp.classList.add('is-invalid');
+      document.getElementById('val-health-doctor').classList.add('visible');
+      firstInvalid = firstInvalid || docInp;
+    }
+    if (!disease) {
+      diseaseArea.classList.add('is-invalid');
+      document.getElementById('val-health-disease').classList.add('visible');
+      firstInvalid = firstInvalid || diseaseArea;
+    }
+    if (firstInvalid) {
+      firstInvalid.focus();
+      return;
+    }
+
+    let resolvedId = idInp.value.trim() || null;
+    if (resolvedId) {
+      const stu = await window.AppStorage.getStudentById(resolvedId);
+      if (!stu || window.AppStorage.normalizeClassId(stu.classId || stu.className) !== classId) {
+        resolvedId = null;
+      }
+    }
+
+    if (!resolvedId) {
+      const roster = await window.AppStorage.getAllRosterStudents();
+      const targetKey = window.AppStorage.getStudentKey(studentName, classId);
+      const matches = roster.filter((s) => window.AppStorage.getStudentKey(s.name, s.classId || s.className) === targetKey);
+      if (matches.length === 1) {
+        resolvedId = matches[0].id;
+      } else if (matches.length > 1) {
+        nameInp.classList.add('is-invalid');
+        showToast(`Multiple students named "${studentName}" exist in ${window.AppStorage.getClassLabel(classId)}. Pick one from suggestions.`, 'error', 4500);
+        nameInp.focus();
+        return;
+      } else {
+        openConfirmDialog({
+          title: 'Create New Student Profile?',
+          message: `"${studentName}" is not in ${window.AppStorage.getClassLabel(classId)}. Confirm adding them as a new custom student and saving this medical record?`,
+          confirmLabel: 'Create & Save Record',
+          confirmBtnClass: 'btn-primary',
+          onConfirm: () => executeHealthSave({ resolvedStudentId: null, allowCreateCustom: true })
+        });
+        return;
+      }
+    }
+
+    await executeHealthSave({ resolvedStudentId: resolvedId, allowCreateCustom: false });
+  }
+
+  async function renderHealthClassStudents() {
+    const grid = document.getElementById('health-students-grid');
+    const secContainer = document.getElementById('health-section-pills');
+    if (!grid || !secContainer) return;
+
+    const allStudents = await window.AppStorage.getStudentsByClass(state.healthClassId);
+    const classHealth = await window.AppStorage.getHealthRecords({ classId: state.healthClassId });
+
+    const byStudent = new Map();
+    classHealth.forEach((rec) => {
+      if (!byStudent.has(rec.studentId)) byStudent.set(rec.studentId, []);
+      byStudent.get(rec.studentId).push(rec);
+    });
+
+    const sections = Array.from(new Set(allStudents.map((s) => s.section).filter(Boolean)));
+    if (state.healthSectionFilter !== 'ALL' && !sections.includes(state.healthSectionFilter)) {
+      state.healthSectionFilter = 'ALL';
+    }
+
+    if (sections.length > 1) {
+      secContainer.innerHTML = `
+        <div class="timeframe-pills" style="margin-bottom:14px;">
+          <button type="button" class="tf-pill ${state.healthSectionFilter === 'ALL' ? 'active' : ''}" data-hsec="ALL">All (${escapeHTML(allStudents.length)})</button>
+          ${sections.map((sec) => `<button type="button" class="tf-pill ${state.healthSectionFilter === sec ? 'active' : ''}" data-hsec="${escapeHTML(sec)}">${escapeHTML(sec)}</button>`).join('')}
+        </div>
+      `;
+      secContainer.querySelectorAll('[data-hsec]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.healthSectionFilter = btn.dataset.hsec;
+          renderHealthClassStudents();
+        });
+      });
+    } else {
+      secContainer.innerHTML = '';
+    }
+
+    let students = allStudents;
+    if (state.healthSectionFilter !== 'ALL') {
+      students = students.filter((s) => s.section === state.healthSectionFilter);
+    }
+    if (state.healthSearch.trim()) {
+      const q = state.healthSearch.trim().toLowerCase();
+      students = students.filter((s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.rollNumber && s.rollNumber.toLowerCase().includes(q)) ||
+        (s.family && s.family.toLowerCase().includes(q))
+      );
+    }
+
+    if (students.length === 0) {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>No Students Found</h3><p>No student matches your search in this class.</p></div>';
+      return;
+    }
+
+    grid.innerHTML = students.map((s) => {
+      const records = byStudent.get(s.id) || [];
+      const latest = records[0] || null;
+      return `
+        <div class="drill-box" data-sid="${escapeHTML(s.id)}" tabindex="0" role="button">
+          <div class="drill-box-top">
+            <div>
+              <div class="drill-box-title">${escapeHTML(s.name)}</div>
+              <div class="drill-box-sub">Roll #${escapeHTML(s.rollNumber || '-')} &bull; Father: ${escapeHTML(s.family || '-')}</div>
+              <div class="drill-box-sub">Phone: ${escapeHTML(s.phone || s.whatsapp || '-')}</div>
+            </div>
+            <span class="drill-pill ${records.length > 0 ? 'tag-health-pill' : ''}">${escapeHTML(records.length)} ${records.length === 1 ? 'Visit' : 'Visits'}</span>
+          </div>
+          ${latest ? `<div style="font-size:0.76rem; color:var(--text-muted);">Latest (${escapeHTML(latest.visitDate || formatDateOnly(latest.createdAt))}): ${escapeHTML(latest.disease.slice(0, 55))}${latest.disease.length > 55 ? '…' : ''}</div>` : ''}
+          <div class="drill-box-footer">
+            <span>Open Complete Medical Report &rarr;</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('.drill-box').forEach((box) => {
+      box.addEventListener('click', () => {
+        state.healthStudentId = box.dataset.sid;
+        refreshHealthModule();
+      });
+    });
+  }
+
+  async function refreshHealthModule() {
+    const browseView = document.getElementById('health-browse-view');
+    const formView = document.getElementById('health-form-view');
+    if (browseView) browseView.style.display = state.healthFormOpen ? 'none' : 'block';
+    if (formView) formView.style.display = state.healthFormOpen ? 'block' : 'none';
+
+    if (state.healthFormOpen) return;
+
+    const bc = document.getElementById('health-breadcrumb');
+    const content = document.getElementById('health-drill-content');
+    if (!bc || !content) return;
+
+    // Breadcrumb
+    let bcHtml = `<button type="button" class="crumb-btn" id="health-bc-root">All Classes (6th–12th)</button>`;
+    let stuObj = null;
+    if (state.healthClassId) {
+      const clsLabel = window.AppStorage.getClassLabel(state.healthClassId);
+      bcHtml += `<span class="crumb-sep">/</span>`;
+      if (state.healthStudentId) {
+        stuObj = await window.AppStorage.getStudentById(state.healthStudentId);
+        if (!stuObj) {
+          state.healthStudentId = null;
+        } else {
+          bcHtml += `<button type="button" class="crumb-btn" id="health-bc-class">${escapeHTML(clsLabel)}</button>`;
+          bcHtml += `<span class="crumb-sep">/</span><span class="crumb-current">${escapeHTML(stuObj.name)}</span>`;
+        }
+      }
+      if (!state.healthStudentId) {
+        bcHtml += `<span class="crumb-current">${escapeHTML(clsLabel)}</span>`;
+      }
+    }
+    bc.innerHTML = bcHtml;
+
+    const rootBtn = document.getElementById('health-bc-root');
+    if (rootBtn) {
+      rootBtn.addEventListener('click', () => {
+        state.healthClassId = null;
+        state.healthStudentId = null;
+        state.healthSearch = '';
+        state.healthSectionFilter = 'ALL';
+        refreshHealthModule();
+      });
+    }
+    const clsBtn = document.getElementById('health-bc-class');
+    if (clsBtn) {
+      clsBtn.addEventListener('click', () => {
+        state.healthStudentId = null;
+        refreshHealthModule();
+      });
+    }
+
+    // LEVEL 0: All Classes (6th to 12th)
+    if (!state.healthClassId) {
+      const classes = window.AppStorage.getClasses();
+      const allRecords = await window.AppStorage.getHealthRecords();
+      const cards = [];
+      for (const c of classes) {
+        const stus = await window.AppStorage.getStudentsByClass(c.id);
+        const clsCount = allRecords.filter((r) => window.AppStorage.normalizeClassId(r.classId) === c.id).length;
+        cards.push(`
+          <div class="drill-box" data-cid="${escapeHTML(c.id)}" tabindex="0" role="button">
+            <div class="drill-box-top">
+              <div>
+                <div class="drill-box-title">${escapeHTML(c.label)}</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} ${stus.length === 1 ? 'Student' : 'Students'}</div>
+              </div>
+              <span class="drill-pill ${clsCount > 0 ? 'tag-health-pill' : ''}">${escapeHTML(clsCount)} ${clsCount === 1 ? 'Medical Visit' : 'Medical Visits'}</span>
+            </div>
+            <div class="drill-box-footer">
+              <span>View Class Students &rarr;</span>
+            </div>
+          </div>
+        `);
+      }
+      content.innerHTML = `<div class="drill-grid">${cards.join('')}</div>`;
+      content.querySelectorAll('.drill-box').forEach((box) => {
+        box.addEventListener('click', () => {
+          state.healthClassId = box.dataset.cid;
+          state.healthStudentId = null;
+          state.healthSearch = '';
+          state.healthSearchComposing = false;
+          state.healthSectionFilter = 'ALL';
+          refreshHealthModule();
+        });
+      });
+      return;
+    }
+
+    // LEVEL 1: All Students inside Selected Class
+    if (!state.healthStudentId) {
+      const existingShell = document.getElementById('health-level1-shell');
+      const needsMount = !existingShell || existingShell.dataset.classId !== String(state.healthClassId);
+      if (needsMount) {
+        content.innerHTML = `
+          <div id="health-level1-shell" data-class-id="${escapeHTML(state.healthClassId)}">
+            <div style="margin-bottom:12px;">
+              <div class="search-box">
+                <span class="search-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <input type="search" id="health-student-search" class="search-input" value="${escapeHTML(state.healthSearch)}" placeholder="Search student name, roll #, or father name..." autocomplete="off" />
+              </div>
+            </div>
+            <div id="health-section-pills"></div>
+            <div id="health-students-grid" class="drill-grid"></div>
+          </div>
+        `;
+        const searchInp = document.getElementById('health-student-search');
+        searchInp.addEventListener('compositionstart', () => { state.healthSearchComposing = true; });
+        searchInp.addEventListener('compositionend', (e) => {
+          state.healthSearchComposing = false;
+          state.healthSearch = e.target.value;
+          renderHealthClassStudents();
+        });
+        searchInp.addEventListener('input', (e) => {
+          state.healthSearch = e.target.value;
+          if (!state.healthSearchComposing) renderHealthClassStudents();
+        });
+      }
+      await renderHealthClassStudents();
+      return;
+    }
+
+    // LEVEL 2: Complete Student Medical Report Page
+    const summary = await window.AppStorage.getStudentHealthSummary(state.healthStudentId);
+    const s = stuObj || await window.AppStorage.getStudentById(state.healthStudentId);
+    if (!s) return;
+
+    const latest = summary.latest;
+    const clsLabel = window.AppStorage.getClassLabel(s.classId || s.className);
+
+    content.innerHTML = `
+      <div class="grand-dossier-container">
+        <div class="dossier-header-card">
+          <div class="dossier-id-row">
+            <div>
+              <h3 class="dossier-student-name">${escapeHTML(s.name)} — Medical Report</h3>
+              <div class="dossier-meta-tags">
+                <span class="dossier-tag">${escapeHTML(clsLabel)} &bull; Section ${escapeHTML(s.section || 'General')}</span>
+                <span class="dossier-tag">Roll #${escapeHTML(s.rollNumber || '-')}</span>
+              </div>
+            </div>
+            <div class="dossier-actions no-print">
+              <button type="button" class="btn btn-health-plus btn-sm" id="btn-health-student-plus">
+                <span class="health-plus-circle" aria-hidden="true">+</span>
+                <span>Add Medical Visit</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-health-print">&#128424; Print Report</button>
+            </div>
+          </div>
+          <div class="dossier-guardian-row">
+            <span>Father Name: <strong>${escapeHTML(s.family || '-')}</strong></span>
+            <span>Phone: <strong>${escapeHTML(s.phone || '-')}</strong></span>
+            <span>WhatsApp: <strong>${escapeHTML(s.whatsapp || s.phone || '-')}</strong></span>
+          </div>
+        </div>
+
+        <div class="dossier-kpi-grid">
+          <div class="kpi-box">
+            <div class="kpi-label">Total Medical Visits</div>
+            <div class="kpi-value" style="color:var(--health-rose);">${escapeHTML(summary.total)}</div>
+            <div class="kpi-sub">Logged health reports</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Last Visit Date</div>
+            <div class="kpi-value" style="font-size:1.12rem;">${escapeHTML(latest ? (latest.visitDate || formatDateOnly(latest.createdAt)) : 'None')}</div>
+            <div class="kpi-sub">${escapeHTML(latest ? formatTimeOnly(latest.createdAt) : 'No visits logged')}</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Latest Issue</div>
+            <div class="kpi-value" style="font-size:1rem;">${escapeHTML(latest ? (latest.disease.slice(0, 32) + (latest.disease.length > 32 ? '…' : '')) : 'Healthy / Clear')}</div>
+            <div class="kpi-sub">Most recent condition</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-label">Last Doctor / Hospital</div>
+            <div class="kpi-value" style="font-size:1rem;">${escapeHTML(latest ? latest.doctorOrHospital : '-')}</div>
+            <div class="kpi-sub">${escapeHTML(latest ? `Supervisor: ${latest.supervisorTeacher}` : 'No clinic visit')}</div>
+          </div>
+        </div>
+
+        ${summary.list.length === 0
+          ? `<div class="empty-state">
+              <div class="empty-state-icon" style="background:var(--health-soft); color:var(--health-rose);" aria-hidden="true">+</div>
+              <h3>No Medical Reports Recorded Yet</h3>
+              <p>Tap the + button to log a medical visit, disease details, doctor/hospital, and supervising teacher for ${escapeHTML(s.name)}.</p>
+              <button type="button" class="btn btn-health-plus" id="btn-health-empty-plus">
+                <span class="health-plus-circle" aria-hidden="true">+</span>
+                <span>Add First Medical Record</span>
+              </button>
+            </div>`
+          : `<div class="history-list">
+              ${summary.list.map((rec) => `
+                <article class="health-visit-card">
+                  <div class="health-visit-header">
+                    <div>
+                      <span class="health-visit-dt">${escapeHTML(rec.visitDate || formatDateOnly(rec.createdAt))} &bull; ${escapeHTML(formatTimeOnly(rec.createdAt))}</span>
+                      <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Recorded: ${escapeHTML(formatDateTime(rec.createdAt))}</div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm btn-danger no-print btn-del-health" data-hid="${escapeHTML(rec.id)}">Delete</button>
+                  </div>
+
+                  <div class="health-disease-box">
+                    <span class="health-disease-lbl">Disease / Medical Condition &amp; Notes</span>
+                    <div class="health-disease-text" dir="auto">${escapeHTML(rec.disease)}</div>
+                  </div>
+
+                  <div class="health-detail-grid">
+                    <div class="health-meta-cell">
+                      <small>Student Name &amp; Class</small>
+                      <strong>${escapeHTML(rec.studentName)} (${escapeHTML(window.AppStorage.getClassLabel(rec.classId))})</strong>
+                    </div>
+                    <div class="health-meta-cell">
+                      <small>Father Name</small>
+                      <strong>${escapeHTML(rec.fatherName || '-')}</strong>
+                    </div>
+                    <div class="health-meta-cell">
+                      <small>Parent Phone Number</small>
+                      <strong>${escapeHTML(rec.phone || '-')}</strong>
+                    </div>
+                    <div class="health-meta-cell">
+                      <small>Doctor / Hospital Name</small>
+                      <strong>${escapeHTML(rec.doctorOrHospital)}</strong>
+                    </div>
+                    <div class="health-meta-cell">
+                      <small>Supervisor Teacher</small>
+                      <strong>${escapeHTML(rec.supervisorTeacher)}</strong>
+                    </div>
+                    <div class="health-meta-cell">
+                      <small>Supervisor Teacher Number</small>
+                      <strong>${escapeHTML(rec.supervisorPhone || '-')}</strong>
+                    </div>
+                  </div>
+                </article>
+              `).join('')}
+            </div>`
+        }
+      </div>
+    `;
+
+    const stuPlusBtn = document.getElementById('btn-health-student-plus');
+    if (stuPlusBtn) {
+      stuPlusBtn.addEventListener('click', () => openHealthFormPage(s.id, s.classId));
+    }
+    const emptyPlusBtn = document.getElementById('btn-health-empty-plus');
+    if (emptyPlusBtn) {
+      emptyPlusBtn.addEventListener('click', () => openHealthFormPage(s.id, s.classId));
+    }
+    const printBtn = document.getElementById('btn-health-print');
+    if (printBtn) {
+      printBtn.addEventListener('click', () => window.print());
+    }
+    content.querySelectorAll('.btn-del-health').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const hid = btn.dataset.hid;
+        openConfirmDialog({
+          title: 'Delete Medical Record?',
+          message: 'Are you sure you want to delete this medical record?',
+          confirmLabel: 'Delete Record',
+          onConfirm: async () => {
+            try {
+              await window.AppStorage.deleteHealthRecord(hid);
+              showToast('Medical record deleted.', 'success');
+              await refreshHealthModule();
+              await updateHomeStats();
+            } catch (err) {
+              showToast(err.message || 'Unable to delete medical record.', 'error');
+            }
+          }
+        });
+      });
+    });
+  }
+
+  /* ========================================================================
      MODULE 3: Monthly Tests & Marks
      ======================================================================== */
   async function refreshTestsModule() {
@@ -2822,6 +3591,7 @@
       prepAttendance: { total: 0, present: 0, absent: 0, leave: 0, percent: null, recent: [] },
       combined: { total: 0, present: 0, absent: 0, leave: 0, percent: null }
     };
+    const hlth = dossier.health || { list: [], total: 0, latest: null };
 
     const hwPct = hw.overall && hw.overall.percentage !== null ? `${hw.overall.percentage}%` : 'No Data';
     const hwRatio = hw.overall ? `${hw.overall.doneCount} / ${hw.overall.totalMarked}` : '0 / 0';
@@ -2865,6 +3635,7 @@
       `Class: ${s.classLabel} (${s.section}) | Father: ${s.family}\n\n` +
       `• *Classes Attendance:* ${classAttPct} (P:${att.classAttendance.present}, A:${att.classAttendance.absent}, L:${att.classAttendance.leave})\n` +
       `• *Prep Attendance:* ${prepAttPct} (P:${att.prepAttendance.present}, A:${att.prepAttendance.absent}, L:${att.prepAttendance.leave})\n` +
+      `• *Medical / Health Visits:* ${hlth.total}${hlth.latest ? ` (Latest: ${hlth.latest.disease.slice(0, 45)})` : ''}\n` +
       `• *Violations:* ${viol.total} (Score: ${viol.score}/${window.AppStorage.MAX_SCORE} - ${viol.statusLabel})\n` +
       `• *Homework Completion:* ${hwRatio} (${hwPct})\n` +
       `• *Pending Unclear Concepts:* ${hw.activePendingTasks.length}\n` +
@@ -3101,6 +3872,31 @@
           }
         </div>
 
+        <!-- 6. Section D: Health & Medical History -->
+        <div class="dossier-section-card">
+          <div class="dossier-section-title">
+            <span>Health &amp; Medical Records (${escapeHTML(hlth.total)})</span>
+            <button type="button" class="btn btn-outline btn-sm no-print" id="btn-grand-add-health">+ Add Medical Visit</button>
+          </div>
+          ${hlth.list.length === 0
+            ? `<p style="font-size:0.875rem; color:var(--text-muted);">No medical visits or health records logged for this student yet.</p>`
+            : `<div class="history-list">
+                ${hlth.list.map((hr) => `
+                  <div class="health-visit-card" style="box-shadow:none;">
+                    <div class="health-visit-header">
+                      <span class="health-visit-dt">${escapeHTML(hr.visitDate || formatDateOnly(hr.createdAt))} &bull; ${escapeHTML(formatTimeOnly(hr.createdAt))}</span>
+                      <span class="drill-pill">${escapeHTML(hr.doctorOrHospital)}</span>
+                    </div>
+                    <div class="health-disease-text" dir="auto">${escapeHTML(hr.disease)}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">
+                      Supervisor: <strong>${escapeHTML(hr.supervisorTeacher)}</strong> (${escapeHTML(hr.supervisorPhone || '-')}) &bull; Recorded: ${escapeHTML(formatDateTime(hr.createdAt))}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>`
+          }
+        </div>
+
       </div>
     `;
 
@@ -3139,6 +3935,16 @@
         document.getElementById('select-class').value = s.classId;
         await updateViolationMatchStatus();
         document.getElementById('textarea-complaint').focus();
+      };
+    }
+
+    const addHealthBtn = document.getElementById('btn-grand-add-health');
+    if (addHealthBtn) {
+      addHealthBtn.onclick = async () => {
+        state.healthClassId = s.classId;
+        state.healthStudentId = s.id;
+        switchScreen('health');
+        await openHealthFormPage(s.id, s.classId);
       };
     }
   }
@@ -3203,6 +4009,7 @@
         <div class="confirm-details-row"><span>Homework Assignments</span><strong>${escapeHTML(p.homeworksCount)}</strong></div>
         <div class="confirm-details-row"><span>Classes Attendance Rolls</span><strong>${escapeHTML(p.classAttendanceCount || 0)}</strong></div>
         <div class="confirm-details-row"><span>Prep Attendance Rolls</span><strong>${escapeHTML(p.prepAttendanceCount || 0)}</strong></div>
+        <div class="confirm-details-row"><span>Health / Medical Records</span><strong>${escapeHTML(p.healthRecordsCount || 0)}</strong></div>
         <div class="confirm-details-row"><span>Monthly Tests</span><strong>${escapeHTML(p.testsCount)}</strong></div>
         <div class="confirm-details-row"><span>Custom Students</span><strong>${escapeHTML(p.customStudentsCount)}</strong></div>
         <div class="confirm-details-row"><span>Custom Subjects</span><strong>${escapeHTML(p.customSubjectsCount)}</strong></div>
@@ -3218,7 +4025,7 @@
           try {
             const res = await window.AppStorage.importJSON(json);
             showToast(
-              `Restored: ${res.complaintsCount} violations, ${res.homeworksCount} homeworks, ${res.classAttendanceCount || 0} class att, ${res.prepAttendanceCount || 0} prep att, ${res.testsCount} tests.`,
+              `Restored: ${res.complaintsCount} violations, ${res.homeworksCount} homeworks, ${res.classAttendanceCount || 0} class att, ${res.prepAttendanceCount || 0} prep att, ${res.healthRecordsCount || 0} health, ${res.testsCount} tests.`,
               'success',
               4500
             );
@@ -3310,6 +4117,16 @@
         state.paPrepSlot = null;
         state.paDirty = false;
         switchScreen('prep-attendance');
+      });
+    }
+    const qaHealth = document.getElementById('qa-health');
+    if (qaHealth) {
+      qaHealth.addEventListener('click', () => {
+        state.healthClassId = null;
+        state.healthStudentId = null;
+        state.healthFormOpen = false;
+        state.healthDirty = false;
+        switchScreen('health');
       });
     }
     const qaTest = document.getElementById('qa-create-test');
@@ -3431,7 +4248,11 @@
     document.getElementById('input-student-name').addEventListener('input', handleViolationNameInput);
     document.getElementById('autocomplete-list').addEventListener('click', handleViolationAutocompletePick);
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.autocomplete-container')) document.getElementById('autocomplete-list').classList.remove('show');
+      if (!e.target.closest('.autocomplete-container')) {
+        document.getElementById('autocomplete-list').classList.remove('show');
+        const healthDropdown = document.getElementById('health-autocomplete-list');
+        if (healthDropdown) healthDropdown.classList.remove('show');
+      }
     });
 
     document.getElementById('textarea-complaint').addEventListener('input', (e) => {
@@ -3574,9 +4395,60 @@
       }
     });
 
+    // Health & Medical Records Form Events
+    document.getElementById('btn-health-open-form').addEventListener('click', () => openHealthFormPage());
+    document.getElementById('btn-health-form-back').addEventListener('click', () => closeHealthFormPage());
+    document.getElementById('btn-health-form-cancel').addEventListener('click', () => closeHealthFormPage());
+    document.getElementById('health-input-student-name').addEventListener('input', handleHealthNameInput);
+    document.getElementById('health-autocomplete-list').addEventListener('click', handleHealthAutocompletePick);
+
+    const markHealthInputEdited = (inputEl, valId) => {
+      if (valId) {
+        const valEl = document.getElementById(valId);
+        if (valEl) valEl.classList.remove('visible');
+      }
+      inputEl.classList.remove('is-invalid');
+      const errBanner = document.getElementById('health-form-error-banner');
+      if (errBanner) errBanner.classList.add('hidden');
+      state.healthDirty = true;
+    };
+
+    document.getElementById('health-select-class').addEventListener('change', async (e) => {
+      markHealthInputEdited(e.target, 'val-health-class');
+      await updateHealthMatchStatus(true);
+    });
+    ['health-input-father-name', 'health-input-phone', 'health-input-supervisor-phone'].forEach((id) => {
+      document.getElementById(id).addEventListener('input', (e) => {
+        delete e.target.dataset.autofilled;
+        state.healthDirty = true;
+      });
+    });
+    document.getElementById('health-input-supervisor').addEventListener('input', (e) => {
+      markHealthInputEdited(e.target, 'val-health-supervisor');
+      const supName = window.AppStorage.normalizeText(e.target.value).toLowerCase();
+      const supPhoneInp = document.getElementById('health-input-supervisor-phone');
+      if (supPhoneInp) {
+        const match = supName ? healthKnownSupervisors.find((s) => s.name.toLowerCase() === supName) : null;
+        if (match && match.phone && (!supPhoneInp.value.trim() || supPhoneInp.dataset.autofilled === 'true')) {
+          supPhoneInp.value = match.phone;
+          supPhoneInp.dataset.autofilled = 'true';
+        } else if ((!match || !supName) && supPhoneInp.dataset.autofilled === 'true') {
+          supPhoneInp.value = '';
+          delete supPhoneInp.dataset.autofilled;
+        }
+      }
+    });
+    [
+      ['health-input-doctor', 'val-health-doctor'],
+      ['health-textarea-disease', 'val-health-disease']
+    ].forEach(([inputId, valId]) => {
+      document.getElementById(inputId).addEventListener('input', (e) => markHealthInputEdited(e.target, valId));
+    });
+    document.getElementById('health-record-form').addEventListener('submit', handleHealthFormSubmit);
+
     // Unsaved marks browser unload protection
     window.addEventListener('beforeunload', (e) => {
-      if (hasUnsavedTestMarks() || hasUnsavedAttendance()) {
+      if (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm()) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -3639,7 +4511,7 @@
     });
 
     // Service Worker Safe Update Helpers
-    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || hasUnsavedAttendance() || !!state.hwFormOpen;
+    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || !!state.hwFormOpen;
     window.__hesConfirmAndApplyUpdate = (worker) => {
       openConfirmDialog({
         title: 'Apply Portal Update?',
@@ -3650,6 +4522,8 @@
           state.testsDirty = false;
           state.caDirty = false;
           state.paDirty = false;
+          state.healthDirty = false;
+          state.healthFormOpen = false;
           if (worker) worker.postMessage({ type: 'SKIP_WAITING' });
         }
       });

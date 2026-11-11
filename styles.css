@@ -63,6 +63,10 @@
   --prep-att-soft: #F5F3FF;
   --prep-att-border: #DDD6FE;
 
+  --health-rose: #BE123C;
+  --health-soft: #FFF1F2;
+  --health-border: #FECDD3;
+
   --text-main: #172033;
   --text-muted: #526078;
 
@@ -726,6 +730,7 @@ button, a, select, input, textarea, [role="button"] {
 .qa-hw { border-left: 3px solid #5EEAD4; }
 .qa-class-att { border-left: 3px solid #7DD3FC; }
 .qa-prep-att { border-left: 3px solid #C4B5FD; }
+.qa-health { border-left: 3px solid #FDA4AF; }
 .qa-test { border-left: 3px solid #A5B4FC; }
 .qa-grand {
   background: #4F46E5;
@@ -815,6 +820,7 @@ button, a, select, input, textarea, [role="button"] {
 .accent-homework { background: linear-gradient(90deg, #0F766E 0%, #0D9488 60%, #14B8A6 100%); }
 .accent-class-att { background: linear-gradient(90deg, #0369A1 0%, #0284C7 60%, #38BDF8 100%); }
 .accent-prep-att { background: linear-gradient(90deg, #5B21B6 0%, #6D28D9 60%, #8B5CF6 100%); }
+.accent-health { background: linear-gradient(90deg, #9F1239 0%, #BE123C 60%, #F43F5E 100%); }
 .accent-tests { background: linear-gradient(90deg, #3730A3 0%, #4F46E5 60%, #6366F1 100%); }
 
 .curved-card-header {
@@ -841,6 +847,7 @@ button, a, select, input, textarea, [role="button"] {
 .icon-homework { background: linear-gradient(145deg, #F0FDFA, #CCFBF1); color: var(--hw-teal); border: 1px solid var(--hw-border); }
 .icon-class-att { background: linear-gradient(145deg, #F0F9FF, #E0F2FE); color: var(--class-att-sky); border: 1px solid var(--class-att-border); }
 .icon-prep-att { background: linear-gradient(145deg, #F5F3FF, #EDE9FE); color: var(--prep-att-violet); border: 1px solid var(--prep-att-border); }
+.icon-health { background: linear-gradient(145deg, #FFF1F2, #FFE4E6); color: var(--health-rose); border: 1px solid var(--health-border); }
 .icon-tests { background: linear-gradient(145deg, #EEF2FF, #E0E7FF); color: var(--test-indigo); border: 1px solid var(--test-border); }
 .icon-grand { background: rgba(255, 255, 255, 0.14); color: #FFFFFF; border: 1px solid rgba(199, 210, 254, 0.35); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
 
@@ -857,6 +864,7 @@ button, a, select, input, textarea, [role="button"] {
 .tag-homework { background: var(--hw-soft); color: #115E59; border: 1px solid var(--hw-border); }
 .tag-class-att { background: var(--class-att-soft); color: #075985; border: 1px solid var(--class-att-border); }
 .tag-prep-att { background: var(--prep-att-soft); color: #5B21B6; border: 1px solid var(--prep-att-border); }
+.tag-health { background: var(--health-soft); color: #9F1239; border: 1px solid var(--health-border); }
 .tag-tests { background: var(--test-soft); color: #3730A3; border: 1px solid var(--test-border); }
 .tag-grand { background: rgba(255, 255, 255, 0.15); color: #E0E7FF; border: 1px solid rgba(199, 210, 254, 0.35); }
 
@@ -878,6 +886,7 @@ button, a, select, input, textarea, [role="button"] {
 .text-homework { color: var(--hw-teal); }
 .text-class-att { color: var(--class-att-sky); }
 .text-prep-att { color: var(--prep-att-violet); }
+.text-health { color: var(--health-rose); }
 .text-tests { color: var(--test-indigo); }
 
 .card-arrow-circle {
@@ -899,11 +908,11 @@ button, a, select, input, textarea, [role="button"] {
   background: linear-gradient(135deg, #001B4A 0%, #0E2B66 55%, #1E3A8A 100%);
   border-color: #1E3A8A;
   color: #FFFFFF;
-  min-height: 210px;
+  min-height: 168px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 14px 28px -8px rgba(0, 27, 74, 0.28);
 }
 
-.grand-report-hero-card .curved-card-title { color: #FFFFFF; font-size: 1.24rem; }
+.grand-report-hero-card .curved-card-title { color: #FFFFFF; font-size: 1.3rem; }
 .grand-report-hero-card .curved-card-desc { color: #DCE6F7; }
 
 .grand-card-inner {
@@ -928,14 +937,14 @@ button, a, select, input, textarea, [role="button"] {
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 10px 18px;
+  padding: 10px 20px;
   min-height: var(--min-touch);
   border-radius: var(--radius-control);
   background: #4F46E5;
   border: 1px solid #818CF8;
   color: #FFFFFF;
   font-weight: 800;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 8px 18px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
   transition: background-color 160ms ease, transform 160ms ease;
@@ -955,6 +964,7 @@ button, a, select, input, textarea, [role="button"] {
   .module-homework:hover .arrow-homework { background-color: var(--hw-teal); color: #FFFFFF; transform: translateX(2px); }
   .module-class-att:hover .arrow-class-att { background-color: var(--class-att-sky); color: #FFFFFF; transform: translateX(2px); }
   .module-prep-att:hover .arrow-prep-att { background-color: var(--prep-att-violet); color: #FFFFFF; transform: translateX(2px); }
+  .module-health:hover .arrow-health { background-color: var(--health-rose); color: #FFFFFF; transform: translateX(2px); }
   .module-tests:hover .arrow-tests { background-color: var(--test-indigo); color: #FFFFFF; transform: translateX(2px); }
   .grand-report-hero-card:hover .grand-cta-pill { background: var(--accent-hover); transform: translateX(2px); }
 }
@@ -1826,6 +1836,166 @@ button, a, select, input, textarea, [role="button"] {
 .att-pill-leave { background: var(--attention-soft); color: #92400E; border: 1px solid var(--attention-border); }
 
 /* ==========================================================================
+   HEALTH & MEDICAL RECORDS MODULE
+   ========================================================================== */
+.health-action-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.health-bc-inline {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 220px;
+}
+
+.btn-health-plus {
+  background: linear-gradient(180deg, #E11D48 0%, #BE123C 100%);
+  color: #FFFFFF;
+  border-color: #9F1239;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 6px 16px rgba(190, 18, 60, 0.28);
+  white-space: nowrap;
+}
+
+.btn-health-plus:hover {
+  background: linear-gradient(180deg, #BE123C 0%, #9F1239 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 20px rgba(159, 18, 57, 0.34);
+}
+
+.health-plus-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.health-form-card {
+  border-top: 4px solid var(--health-rose);
+}
+
+.health-form-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.health-form-dt-pill {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #9F1239;
+  background: var(--health-soft);
+  border: 1px solid var(--health-border);
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+}
+
+.health-visit-card {
+  background: #FFFFFF;
+  border: 1.5px solid var(--border-color);
+  border-left: 5px solid var(--health-rose);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.health-visit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.health-visit-dt {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--health-rose);
+  background: var(--health-soft);
+  border: 1px solid var(--health-border);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+
+.health-disease-box {
+  background: var(--bg-muted-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.health-disease-lbl {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.health-disease-text {
+  font-family: var(--font-urdu);
+  font-size: 0.96rem;
+  line-height: 1.75;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.health-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.health-meta-cell {
+  background: var(--bg-muted-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.health-meta-cell small {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.health-meta-cell strong {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--navy);
+  word-break: break-word;
+}
+
+.tag-health-pill {
+  background: var(--health-soft);
+  color: #9F1239;
+  border-color: var(--health-border);
+}
+
+/* ==========================================================================
    VIOLATIONS MODULE: Controls, Meter, Accessible Severity, Master Table
    ========================================================================== */
 .records-controls {
@@ -2447,8 +2617,9 @@ button, a, select, input, textarea, [role="button"] {
   .form-row-split { grid-template-columns: 1.2fr 0.8fr; }
   .home-stats-ribbon { grid-template-columns: repeat(3, 1fr); }
   .home-portal-grid { grid-template-columns: repeat(2, 1fr); }
-  .grand-report-hero-card { grid-column: auto; }
-  .grand-card-inner { flex-direction: column; align-items: stretch; }
+  .grand-report-hero-card { grid-column: 1 / -1; }
+  .grand-card-inner { flex-direction: row; align-items: center; }
+  .grand-cta-pill { width: auto; }
   .drill-grid { grid-template-columns: repeat(2, 1fr); }
   .students-grid { grid-template-columns: repeat(2, 1fr); }
   .hw-banner-header { flex-direction: row; align-items: center; justify-content: space-between; }
@@ -2613,6 +2784,7 @@ button, a, select, input, textarea, [role="button"] {
   .nav-count-amber { background: var(--attention-soft); color: var(--sev-med-text); }
   .nav-count-sky { background: var(--class-att-soft); color: #075985; }
   .nav-count-violet { background: var(--prep-att-soft); color: #5B21B6; }
+  .nav-count-rose { background: var(--health-soft); color: #9F1239; }
 
   .sidebar-footer { padding-top: 12px; border-top: 1px solid var(--border-color); }
   .sidebar-footer-card {
