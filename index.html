@@ -136,6 +136,20 @@
           <span class="nav-count" id="snav-badge-tests">0</span>
         </button>
 
+        <button type="button" class="nav-link" data-screen="student-details" id="desk-nav-student-details" title="Student Detail &amp; Directory">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2"/>
+              <circle cx="9" cy="10" r="2.2"/>
+              <path d="M6.2 16c.5-1.5 1.6-2.3 2.8-2.3s2.3.8 2.8 2.3"/>
+              <line x1="14" y1="9" x2="18.5" y2="9"/>
+              <line x1="14" y1="13" x2="18.5" y2="13"/>
+            </svg>
+          </span>
+          <span class="nav-label">Student Detail</span>
+          <span class="nav-count nav-count-teal" id="snav-badge-student-details">134</span>
+        </button>
+
         <button type="button" class="nav-link" data-screen="grand-report" id="desk-nav-grand-report" title="Grand Student Report">
           <span class="nav-icon" aria-hidden="true">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
@@ -185,6 +199,14 @@
 
           <!-- Global Utility Menu (CSV Export, JSON Backup, JSON Restore) -->
           <div class="header-actions">
+            <button type="button" class="btn btn-outline btn-theme-toggle no-print" id="btn-theme-toggle" title="Toggle Light / Dark Mode" aria-label="Toggle Light / Dark Mode">
+              <span class="theme-icon" id="theme-toggle-icon" aria-hidden="true">🌙</span>
+              <span class="theme-label hide-compact" id="theme-toggle-label">Dark</span>
+            </button>
+            <button type="button" class="btn btn-primary hesai-header-btn no-print" id="btn-ai-assistant" title="Open AI Assistant" aria-label="Open AI Assistant">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L14.8 8.6L22 9.2L16.5 13.8L18.2 21L12 17.2L5.8 21L7.5 13.8L2 9.2L9.2 8.6L12 2Z"/></svg>
+              <span class="hesai-header-btn-text">AI Assistant</span>
+            </button>
             <div class="utility-menu-wrap" id="utility-menu-wrap">
               <button
                 type="button"
@@ -346,6 +368,15 @@
                     <line x1="9" y1="14" x2="15" y2="14"/>
                   </svg>
                   <span>Create Test</span>
+                </button>
+                <button type="button" class="qa-pill qa-student-detail" id="qa-student-detail">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2"/>
+                    <circle cx="9" cy="10" r="2"/>
+                    <line x1="14" y1="9" x2="18.5" y2="9"/>
+                    <line x1="14" y1="13" x2="18.5" y2="13"/>
+                  </svg>
+                  <span>Student Detail</span>
                 </button>
                 <button type="button" class="qa-pill qa-grand" id="qa-find-student">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
@@ -586,7 +617,37 @@
               </div>
             </div>
 
-            <!-- Card 6: Grand Student Report (Deep Navy) -->
+            <!-- Card 7: Student Detail & Full Profiles (Emerald/Teal Full-Span Directory Banner) -->
+            <div class="curved-action-card module-card module-student-detail student-detail-hero-card" data-target="student-details" id="card-student-details" tabindex="0" role="button" aria-label="Open Student Detail and Contacts Directory">
+              <div class="card-accent-strip accent-student-detail"></div>
+              <div class="grand-card-inner">
+                <div class="grand-card-left">
+                  <div class="grand-card-top-row">
+                    <div class="curved-card-icon icon-student-detail" aria-hidden="true">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="16" rx="2"/>
+                        <circle cx="9" cy="10" r="2.2"/>
+                        <path d="M6.2 16c.5-1.5 1.6-2.3 2.8-2.3s2.3.8 2.8 2.3"/>
+                        <line x1="14" y1="9" x2="18.5" y2="9"/>
+                        <line x1="14" y1="13" x2="18.5" y2="13"/>
+                      </svg>
+                    </div>
+                    <span class="card-tag tag-student-detail" id="home-student-details-tag">134 Students &bull; Contacts</span>
+                  </div>
+                  <h3 class="curved-card-title">Student Detail</h3>
+                  <p class="curved-card-desc">
+                    Search or browse Classes 6th–12th to view complete student records: Roll #, Section, Father Name, Family Code, Primary Phone, WhatsApp, Admission Date, and Add/Edit profiles.
+                  </p>
+                </div>
+                <div class="grand-card-right">
+                  <span class="stu-detail-cta-pill">
+                    Open Student Detail &rarr;
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 8: Grand Student Report (Deep Navy) -->
             <div class="curved-action-card module-card module-grand grand-report-hero-card" data-target="grand-report" tabindex="0" role="button" aria-label="Open Grand Student Report">
               <div class="grand-card-inner">
                 <div class="grand-card-left">
@@ -1215,6 +1276,142 @@
         </section>
 
         <!-- ==================================================================
+             SCREEN 2E: STUDENT DETAIL & COMPLETE DIRECTORY MODULE
+             ================================================================== -->
+        <section id="screen-student-details" class="screen" aria-labelledby="stu-detail-heading">
+          <div class="screen-top-bar no-print">
+            <button type="button" class="btn-back-home" aria-label="Back to Home">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Home</span>
+            </button>
+            <h2 id="stu-detail-heading" class="screen-title">Student Detail &amp; Complete Directory</h2>
+          </div>
+
+          <!-- BROWSE / PROFILE VIEW -->
+          <div id="stu-detail-browse-view">
+            <div class="health-action-strip no-print">
+              <div class="drill-breadcrumb health-bc-inline" id="stu-detail-breadcrumb"></div>
+              <button type="button" class="btn btn-primary btn-stu-add" id="btn-stu-detail-add" aria-label="Add new student details">
+                <span class="health-plus-circle" aria-hidden="true">+</span>
+                <span>Add Student</span>
+              </button>
+            </div>
+            <div id="stu-detail-drill-content"></div>
+          </div>
+
+          <!-- ADD / EDIT STUDENT DETAILS FORM PAGE -->
+          <div id="stu-detail-form-view" style="display: none;">
+            <div class="form-card stu-detail-form-card">
+              <div class="health-form-topbar">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-stu-form-back">&larr; Back</button>
+                <span class="drill-pill drill-pill-blue" id="stu-form-mode-badge">New Student Record</span>
+              </div>
+
+              <div class="form-header" style="margin-top: 12px;">
+                <h3 id="stu-form-title">Add Student Details</h3>
+                <p>Enter student identity, class, roll number, father / guardian details, family code, phone, WhatsApp, and admission info.</p>
+              </div>
+
+              <div id="stu-form-error-banner" class="form-error-banner hidden" role="alert">
+                <span class="banner-icon" aria-hidden="true">&#9888;</span>
+                <div class="banner-text">
+                  <strong>Could Not Save Student Details</strong>
+                  <p id="stu-form-error-details"></p>
+                </div>
+              </div>
+
+              <form id="stu-detail-form" class="complaint-form" novalidate>
+                <input type="hidden" id="stu-input-edit-id" value="" />
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="stu-input-name" class="form-label">
+                      Student Name <span class="required-asterisk">*</span>
+                    </label>
+                    <input type="text" id="stu-input-name" class="input-control" placeholder="Full student name..." autocomplete="off" required />
+                    <div id="val-stu-name" class="field-validation-msg">Student name is required.</div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="stu-select-class" class="form-label">
+                      Class <span class="required-asterisk">*</span>
+                    </label>
+                    <select id="stu-select-class" class="select-control" required>
+                      <option value="">-- Select Class --</option>
+                    </select>
+                    <div id="val-stu-class" class="field-validation-msg">Please select a class.</div>
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="stu-input-roll" class="form-label">Roll Number</label>
+                    <input type="text" id="stu-input-roll" class="input-control" placeholder="e.g. 256" autocomplete="off" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="stu-input-section" class="form-label">Section</label>
+                    <input type="text" id="stu-input-section" class="input-control" placeholder="e.g. A, Bio, Comp, General" autocomplete="off" />
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="stu-input-father" class="form-label">Father / Guardian Name</label>
+                    <input type="text" id="stu-input-father" class="input-control" placeholder="Father or guardian name..." autocomplete="off" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="stu-input-family-number" class="form-label">Family Code / Number</label>
+                    <input type="text" id="stu-input-family-number" class="input-control" placeholder="e.g. F0108 (optional)" autocomplete="off" />
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="stu-input-phone" class="form-label">Primary / Father Phone Number</label>
+                    <input type="tel" id="stu-input-phone" class="input-control" placeholder="e.g. 03001234567" autocomplete="off" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="stu-input-whatsapp" class="form-label">WhatsApp Number</label>
+                    <input type="tel" id="stu-input-whatsapp" class="input-control" placeholder="Same as phone if blank" autocomplete="off" />
+                  </div>
+                </div>
+
+                <div class="form-row-split">
+                  <div class="form-group">
+                    <label for="stu-input-admitted" class="form-label">Admission Date</label>
+                    <input type="text" id="stu-input-admitted" class="input-control" placeholder="e.g. 16 Sep 2026 or 2026-11-12" autocomplete="off" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="stu-select-status" class="form-label">Enrollment Status</label>
+                    <select id="stu-select-status" class="select-control">
+                      <option value="Active">Active</option>
+                      <option value="Leave / Long Absent">Leave / Long Absent</option>
+                      <option value="Passed Out / Left">Passed Out / Left</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="stu-textarea-notes" class="form-label">Additional Details / Address / Notes</label>
+                  <textarea id="stu-textarea-notes" class="textarea-control" dir="auto" rows="3" placeholder="Address, hostel/day-scholar note, alternate contact, or extra remarks..."></textarea>
+                </div>
+
+                <div class="hw-form-actions">
+                  <button type="button" class="btn btn-outline" id="btn-stu-form-cancel">Cancel</button>
+                  <button type="submit" class="btn btn-primary" id="btn-stu-form-submit">Save Student Details</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================
              SCREEN 3: MONTHLY TESTS MODULE
              ================================================================== -->
         <section id="screen-tests" class="screen" aria-labelledby="tests-heading">
@@ -1391,6 +1588,12 @@
       </svg>
       <span>Tests</span>
     </button>
+    <button type="button" class="tab-btn" data-screen="student-details" id="tab-nav-student-details">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><line x1="14" y1="9" x2="18.5" y2="9"/><line x1="14" y1="13" x2="18.5" y2="13"/>
+      </svg>
+      <span>Students</span>
+    </button>
     <button type="button" class="tab-btn" data-screen="grand-report" id="tab-nav-grand-report">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
@@ -1402,10 +1605,21 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container no-print" aria-live="polite"></div>
 
+  <!-- AI Assistant Mobile FAB & Drawer Mount -->
+  <button type="button" class="hesai-fab no-print" id="btn-ai-fab" aria-label="Open AI Assistant" title="Open AI Assistant">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L14.8 8.6L22 9.2L16.5 13.8L18.2 21L12 17.2L5.8 21L7.5 13.8L2 9.2L9.2 8.6L12 2Z"/></svg>
+    <span class="hesai-fab-label">AI</span>
+  </button>
+  <div id="hesai-root" class="hesai-root no-print"></div>
+
   <!-- Scripts -->
   <script src="students_data.js"></script>
   <script src="storage.js"></script>
   <script src="app.js"></script>
+  <script src="gemini-client.js"></script>
+  <script src="assistant-tools.js"></script>
+  <script src="assistant.js"></script>
+  <script src="erp-client.js"></script>
 
   <!-- Safe Service Worker Registration & Deferred Update Handling -->
   <script>

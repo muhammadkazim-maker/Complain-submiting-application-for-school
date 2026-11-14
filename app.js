@@ -57,6 +57,16 @@
     healthFormOpen: false,
     healthDirty: false,
 
+    // Student Detail & Directory module
+    stuDetailClassId: null,
+    stuDetailStudentId: null,
+    stuDetailSearch: '',
+    stuDetailGlobalSearch: '',
+    stuDetailSectionFilter: 'ALL',
+    stuDetailComposing: false,
+    stuFormOpen: false,
+    stuFormDirty: false,
+
     // Monthly Tests module
     testId: null,
     testClassId: null,
@@ -86,6 +96,7 @@
     'class-attendance': { title: 'Classes Attendance', subtitle: 'Classes 6th–12th subject-wise attendance roll call' },
     'prep-attendance': { title: 'Prep Attendance', subtitle: 'Classes 6th–12th Prep 1, Prep 2 & Prep 3 attendance' },
     health: { title: 'Health & Medical Records', subtitle: 'Student medical reports, doctor/hospital visits & supervisor details' },
+    'student-details': { title: 'Student Detail & Directory', subtitle: 'Complete student contacts, father details, family codes, roll numbers & profiles' },
     tests: { title: 'Monthly Tests', subtitle: 'Assessment boxes, class subjects & validated student marks' },
     'grand-report': { title: 'Grand Student Report', subtitle: 'Unified student dossier, print profile & guardian contact' }
   };
@@ -162,6 +173,37 @@
   function formatTimeOnly(iso) {
     if (!iso) return '-';
     return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatPhoneForWa(num) {
+    if (!num || num === '-' || num === '—') return '';
+    let p = String(num).replace(/[^\d+]/g, '');
+    if (p.startsWith('03')) p = '92' + p.slice(1);
+    else if (p.startsWith('+')) p = p.slice(1);
+    return p;
+  }
+
+  async function copyTextSafe(text, label = 'Value') {
+    const clean = String(text || '').trim();
+    if (!clean || clean === '-') return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(clean);
+      } else {
+        const tmp = document.createElement('textarea');
+        tmp.value = clean;
+        tmp.setAttribute('readonly', '');
+        tmp.style.position = 'fixed';
+        tmp.style.opacity = '0';
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        tmp.remove();
+      }
+      showToast(`${label} copied: ${clean}`, 'success', 2200);
+    } catch {
+      showToast(`Unable to copy ${label}.`, 'error');
+    }
   }
 
   function getGradeLabel(pct) {
@@ -258,6 +300,10 @@
     return state.currentScreen === 'health' && !!state.healthFormOpen && !!state.healthDirty;
   }
 
+  function hasUnsavedStudentForm() {
+    return state.currentScreen === 'student-details' && !!state.stuFormOpen && !!state.stuFormDirty;
+  }
+
   function guardUnsavedPortalEdits(proceedCallback, cancelCallback = null) {
     if (hasUnsavedTestMarks()) {
       openConfirmDialog({
@@ -303,6 +349,21 @@
       });
       return;
     }
+    if (hasUnsavedStudentForm()) {
+      openConfirmDialog({
+        title: 'Unsaved Student Details',
+        message: 'You have unsaved changes in the student details form. Discard changes and continue?',
+        confirmLabel: 'Discard Form',
+        confirmBtnClass: 'btn-danger',
+        onConfirm: () => {
+          state.stuFormDirty = false;
+          state.stuFormOpen = false;
+          proceedCallback();
+        },
+        onCancel: cancelCallback
+      });
+      return;
+    }
     proceedCallback();
   }
 
@@ -317,7 +378,7 @@
     if (
       !bypassDirtyCheck &&
       screenName !== state.currentScreen &&
-      (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm())
+      (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm())
     ) {
       guardUnsavedPortalEdits(() => switchScreen(screenName, true));
       return;
@@ -356,6 +417,7 @@
     else if (screenName === 'class-attendance') refreshAttendanceModule('class');
     else if (screenName === 'prep-attendance') refreshAttendanceModule('prep');
     else if (screenName === 'health') refreshHealthModule();
+    else if (screenName === 'student-details') refreshStudentDetailModule();
     else if (screenName === 'tests') refreshTestsModule();
     else if (screenName === 'grand-report') refreshGrandReportModule();
   }
@@ -412,6 +474,8 @@
     }
     const stuTag = document.getElementById('home-students-tag');
     if (stuTag) stuTag.textContent = `${roster.length} Student Profiles`;
+    const stuDetailsTag = document.getElementById('home-student-details-tag');
+    if (stuDetailsTag) stuDetailsTag.textContent = `${roster.length} Students • Contacts`;
 
     const badgeViol = document.getElementById('snav-badge-violations');
     const badgePend = document.getElementById('snav-badge-pending');
@@ -419,12 +483,14 @@
     const badgeClassAtt = document.getElementById('snav-badge-class-att');
     const badgePrepAtt = document.getElementById('snav-badge-prep-att');
     const badgeHealth = document.getElementById('snav-badge-health');
+    const badgeStuDetails = document.getElementById('snav-badge-student-details');
     if (badgeViol) badgeViol.textContent = complaints.length;
     if (badgePend) badgePend.textContent = pending.length;
     if (badgeTests) badgeTests.textContent = tests.length;
     if (badgeClassAtt) badgeClassAtt.textContent = classAttToday;
     if (badgePrepAtt) badgePrepAtt.textContent = prepAttToday;
     if (badgeHealth) badgeHealth.textContent = healthList.length;
+    if (badgeStuDetails) badgeStuDetails.textContent = roster.length;
 
     const recoverBtn = document.getElementById('btn-restore-recovery');
     if (recoverBtn) {
@@ -464,6 +530,7 @@
     const classes = window.AppStorage.getClasses();
     const formSelect = document.getElementById('select-class');
     const healthSelect = document.getElementById('health-select-class');
+    const stuDetailSelect = document.getElementById('stu-select-class');
     const filterSelect = document.getElementById('filter-class');
     const hwSelect = document.getElementById('hw-select-class');
     const pendingFilter = document.getElementById('pending-filter-class');
@@ -472,6 +539,7 @@
 
     formSelect.innerHTML = '<option value="">-- Select Class --</option>' + optsHtml;
     if (healthSelect) healthSelect.innerHTML = '<option value="">-- Select Class --</option>' + optsHtml;
+    if (stuDetailSelect) stuDetailSelect.innerHTML = '<option value="">-- Select Class --</option>' + optsHtml;
     filterSelect.innerHTML = '<option value="ALL">All Classes</option>' + optsHtml;
     hwSelect.innerHTML = optsHtml;
     pendingFilter.innerHTML = '<option value="ALL">All Classes</option>' + optsHtml;
@@ -2992,6 +3060,604 @@
   }
 
   /* ========================================================================
+     MODULE 2E: Student Detail & Complete Directory
+     ======================================================================== */
+  function clearStudentFormErrors() {
+    const banner = document.getElementById('stu-form-error-banner');
+    if (banner) banner.classList.add('hidden');
+    [
+      ['stu-input-name', 'val-stu-name'],
+      ['stu-select-class', 'val-stu-class']
+    ].forEach(([inpId, valId]) => {
+      const inp = document.getElementById(inpId);
+      const val = document.getElementById(valId);
+      if (inp) inp.classList.remove('is-invalid');
+      if (val) val.classList.remove('visible');
+    });
+  }
+
+  async function openStudentDetailForm(editStudent = null) {
+    state.stuFormOpen = true;
+    state.stuFormDirty = false;
+    clearStudentFormErrors();
+
+    const form = document.getElementById('stu-detail-form');
+    if (form) form.reset();
+
+    const modeBadge = document.getElementById('stu-form-mode-badge');
+    const titleEl = document.getElementById('stu-form-title');
+    const idInp = document.getElementById('stu-input-edit-id');
+    const nameInp = document.getElementById('stu-input-name');
+    const clsSel = document.getElementById('stu-select-class');
+    const rollInp = document.getElementById('stu-input-roll');
+    const secInp = document.getElementById('stu-input-section');
+    const fatherInp = document.getElementById('stu-input-father');
+    const famNoInp = document.getElementById('stu-input-family-number');
+    const phoneInp = document.getElementById('stu-input-phone');
+    const waInp = document.getElementById('stu-input-whatsapp');
+    const admittedInp = document.getElementById('stu-input-admitted');
+    const statusSel = document.getElementById('stu-select-status');
+    const notesInp = document.getElementById('stu-textarea-notes');
+
+    if (editStudent) {
+      if (modeBadge) modeBadge.textContent = editStudent.isOfficial ? 'Editing Official Record' : 'Editing Custom Record';
+      if (titleEl) titleEl.textContent = `Edit Details — ${editStudent.name}`;
+      if (idInp) idInp.value = editStudent.id || '';
+      if (nameInp) nameInp.value = editStudent.name || '';
+      if (clsSel) clsSel.value = window.AppStorage.normalizeClassId(editStudent.classId || editStudent.className);
+      if (rollInp) rollInp.value = editStudent.rollNumber && editStudent.rollNumber !== '-' ? editStudent.rollNumber : '';
+      if (secInp) secInp.value = editStudent.section || '';
+      if (fatherInp) fatherInp.value = editStudent.family && editStudent.family !== '-' ? editStudent.family : '';
+      if (famNoInp) famNoInp.value = editStudent.familyNumber || '';
+      if (phoneInp) phoneInp.value = editStudent.phone && editStudent.phone !== '-' ? editStudent.phone : '';
+      if (waInp) waInp.value = editStudent.whatsapp && editStudent.whatsapp !== '-' ? editStudent.whatsapp : '';
+      if (admittedInp) admittedInp.value = editStudent.admitted && editStudent.admitted !== '-' ? editStudent.admitted : '';
+      if (statusSel) statusSel.value = editStudent.status || 'Active';
+      if (notesInp) notesInp.value = editStudent.notes || '';
+    } else {
+      if (modeBadge) modeBadge.textContent = 'New Student Record';
+      if (titleEl) titleEl.textContent = 'Add New Student Details';
+      if (idInp) idInp.value = '';
+      if (clsSel) clsSel.value = state.stuDetailClassId || '';
+      if (secInp) secInp.value = 'A';
+      if (admittedInp) admittedInp.value = window.AppStorage.getLocalTodayDate();
+      if (statusSel) statusSel.value = 'Active';
+    }
+
+    await refreshStudentDetailModule();
+    setTimeout(() => {
+      if (nameInp) nameInp.focus();
+    }, 30);
+  }
+
+  function closeStudentDetailForm(bypassDirtyCheck = false) {
+    if (!bypassDirtyCheck && hasUnsavedStudentForm()) {
+      guardUnsavedPortalEdits(() => closeStudentDetailForm(true));
+      return;
+    }
+    state.stuFormOpen = false;
+    state.stuFormDirty = false;
+    clearStudentFormErrors();
+    refreshStudentDetailModule();
+  }
+
+  async function handleStudentDetailFormSubmit(e) {
+    e.preventDefault();
+    clearStudentFormErrors();
+
+    const idInp = document.getElementById('stu-input-edit-id');
+    const nameInp = document.getElementById('stu-input-name');
+    const clsSel = document.getElementById('stu-select-class');
+    const name = nameInp ? nameInp.value.trim() : '';
+    const classId = clsSel ? clsSel.value : '';
+
+    let firstInvalid = null;
+    if (!name) {
+      if (nameInp) nameInp.classList.add('is-invalid');
+      const v = document.getElementById('val-stu-name');
+      if (v) v.classList.add('visible');
+      firstInvalid = firstInvalid || nameInp;
+    }
+    if (!classId) {
+      if (clsSel) clsSel.classList.add('is-invalid');
+      const v = document.getElementById('val-stu-class');
+      if (v) v.classList.add('visible');
+      firstInvalid = firstInvalid || clsSel;
+    }
+    if (firstInvalid) {
+      firstInvalid.focus();
+      return;
+    }
+
+    try {
+      const saved = await window.AppStorage.saveStudentDetails({
+        studentId: idInp && idInp.value ? idInp.value.trim() : null,
+        name,
+        classId,
+        rollNumber: document.getElementById('stu-input-roll').value.trim(),
+        section: document.getElementById('stu-input-section').value.trim(),
+        family: document.getElementById('stu-input-father').value.trim(),
+        familyNumber: document.getElementById('stu-input-family-number').value.trim(),
+        phone: document.getElementById('stu-input-phone').value.trim(),
+        whatsapp: document.getElementById('stu-input-whatsapp').value.trim(),
+        admitted: document.getElementById('stu-input-admitted').value.trim(),
+        status: document.getElementById('stu-select-status').value,
+        notes: document.getElementById('stu-textarea-notes').value
+      });
+
+      state.stuFormOpen = false;
+      state.stuFormDirty = false;
+      state.stuDetailClassId = window.AppStorage.normalizeClassId(saved.classId || saved.className);
+      state.stuDetailStudentId = saved.id;
+      showToast(`Student details saved for ${saved.name}!`, 'success');
+      await refreshStudentDetailModule();
+      await updateHomeStats();
+    } catch (err) {
+      const banner = document.getElementById('stu-form-error-banner');
+      const det = document.getElementById('stu-form-error-details');
+      if (det) det.textContent = err.message || 'Unable to save student details.';
+      if (banner) banner.classList.remove('hidden');
+      showToast(err.message || 'Unable to save student details.', 'error');
+    }
+  }
+
+  function matchesStudentDetailQuery(s, queryLower) {
+    if (!queryLower) return true;
+    const fields = [
+      s.name,
+      s.rollNumber,
+      s.classId,
+      window.AppStorage.getClassLabel(s.classId || s.className),
+      s.section,
+      s.family,
+      s.familyNumber,
+      s.phone,
+      s.whatsapp,
+      s.admitted,
+      s.status,
+      s.notes
+    ];
+    return fields.some((f) => String(f || '').toLowerCase().includes(queryLower));
+  }
+
+  function renderStudentDirectoryCardHtml(s, showClassLabel = false) {
+    const clsLabel = window.AppStorage.getClassLabel(s.classId || s.className);
+    const waDisplay = s.whatsapp || s.phone || '-';
+    return `
+      <div class="drill-box stu-dir-card" data-sid="${escapeHTML(s.id)}" data-cid="${escapeHTML(window.AppStorage.normalizeClassId(s.classId || s.className))}" tabindex="0" role="button">
+        <div class="drill-box-top">
+          <div>
+            <div class="drill-box-title">${escapeHTML(s.name)}</div>
+            <div class="drill-box-sub">${showClassLabel ? `${escapeHTML(clsLabel)} &bull; ` : ''}Roll #${escapeHTML(s.rollNumber || '-')} &bull; Sec ${escapeHTML(s.section || '-')}</div>
+            <div class="drill-box-sub">Father: <strong>${escapeHTML(s.family || '-')}</strong>${s.familyNumber ? ` &bull; ${escapeHTML(s.familyNumber)}` : ''}</div>
+            <div class="drill-box-sub">Phone: <strong>${escapeHTML(s.phone || '-')}</strong> &bull; WA: <strong>${escapeHTML(waDisplay)}</strong></div>
+          </div>
+          <span class="drill-pill ${s.hasOverride ? 'drill-pill-blue' : (!s.isOfficial ? 'tag-student-detail' : '')}">${escapeHTML(s.status || 'Active')}</span>
+        </div>
+        <div class="drill-box-footer">
+          <span>View Full Details &rarr;</span>
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderStudentDetailGlobalResults() {
+    const resultsWrap = document.getElementById('stu-global-results');
+    const classesWrap = document.getElementById('stu-classes-overview');
+    if (!resultsWrap || !classesWrap) return;
+
+    const q = state.stuDetailGlobalSearch.trim().toLowerCase();
+    if (!q) {
+      resultsWrap.innerHTML = '';
+      classesWrap.style.display = 'block';
+      return;
+    }
+
+    classesWrap.style.display = 'none';
+    const roster = await window.AppStorage.getAllRosterStudents();
+    const matches = roster.filter((s) => matchesStudentDetailQuery(s, q));
+
+    if (matches.length === 0) {
+      resultsWrap.innerHTML = `<div class="empty-state"><h3>No Matching Students</h3><p>No student matches "${escapeHTML(state.stuDetailGlobalSearch.trim())}" across Name, Roll #, Father Name, Family #, Phone, or WhatsApp.</p></div>`;
+      return;
+    }
+
+    resultsWrap.innerHTML = `
+      <div style="margin-bottom:10px; font-size:0.86rem; font-weight:700; color:var(--text-muted);">
+        Found ${escapeHTML(matches.length)} matching ${matches.length === 1 ? 'student' : 'students'}
+      </div>
+      <div class="drill-grid">${matches.map((s) => renderStudentDirectoryCardHtml(s, true)).join('')}</div>
+    `;
+    resultsWrap.querySelectorAll('.stu-dir-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        state.stuDetailClassId = card.dataset.cid;
+        state.stuDetailStudentId = card.dataset.sid;
+        refreshStudentDetailModule();
+      });
+    });
+  }
+
+  async function renderStudentDetailClassStudents() {
+    const pillsEl = document.getElementById('stu-section-pills');
+    const gridEl = document.getElementById('stu-class-grid');
+    if (!pillsEl || !gridEl || !state.stuDetailClassId) return;
+
+    const allStudents = await window.AppStorage.getStudentsByClass(state.stuDetailClassId);
+    const sections = Array.from(new Set(allStudents.map((s) => s.section).filter(Boolean)));
+    if (state.stuDetailSectionFilter !== 'ALL' && !sections.includes(state.stuDetailSectionFilter)) {
+      state.stuDetailSectionFilter = 'ALL';
+    }
+
+    if (sections.length > 1) {
+      pillsEl.innerHTML = `
+        <div class="timeframe-pills" style="margin-bottom:14px;">
+          <button type="button" class="tf-pill ${state.stuDetailSectionFilter === 'ALL' ? 'active' : ''}" data-ssec="ALL">All (${escapeHTML(allStudents.length)})</button>
+          ${sections.map((sec) => `<button type="button" class="tf-pill ${state.stuDetailSectionFilter === sec ? 'active' : ''}" data-ssec="${escapeHTML(sec)}">${escapeHTML(sec)}</button>`).join('')}
+        </div>
+      `;
+      pillsEl.querySelectorAll('[data-ssec]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.stuDetailSectionFilter = btn.dataset.ssec;
+          renderStudentDetailClassStudents();
+        });
+      });
+    } else {
+      pillsEl.innerHTML = '';
+    }
+
+    let filtered = state.stuDetailSectionFilter === 'ALL'
+      ? allStudents
+      : allStudents.filter((s) => s.section === state.stuDetailSectionFilter);
+
+    const q = state.stuDetailSearch.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((s) => matchesStudentDetailQuery(s, q));
+    }
+
+    if (filtered.length === 0) {
+      gridEl.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>No Students Found</h3><p>No student matches your filter or search in this class.</p></div>';
+      return;
+    }
+
+    gridEl.innerHTML = filtered.map((s) => renderStudentDirectoryCardHtml(s, false)).join('');
+    gridEl.querySelectorAll('.stu-dir-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        state.stuDetailStudentId = card.dataset.sid;
+        refreshStudentDetailModule();
+      });
+    });
+  }
+
+  async function refreshStudentDetailModule() {
+    const browseView = document.getElementById('stu-detail-browse-view');
+    const formView = document.getElementById('stu-detail-form-view');
+    if (browseView) browseView.style.display = state.stuFormOpen ? 'none' : 'block';
+    if (formView) formView.style.display = state.stuFormOpen ? 'block' : 'none';
+    if (state.stuFormOpen) return;
+
+    const bc = document.getElementById('stu-detail-breadcrumb');
+    const content = document.getElementById('stu-detail-drill-content');
+    if (!bc || !content) return;
+
+    let bcHtml = `<button type="button" class="crumb-btn" id="stu-bc-root">All Classes (6th–12th)</button>`;
+    let stuObj = null;
+    if (state.stuDetailClassId) {
+      const clsLabel = window.AppStorage.getClassLabel(state.stuDetailClassId);
+      bcHtml += `<span class="crumb-sep">/</span>`;
+      if (state.stuDetailStudentId) {
+        stuObj = await window.AppStorage.getStudentById(state.stuDetailStudentId);
+        if (!stuObj) {
+          state.stuDetailStudentId = null;
+        } else {
+          bcHtml += `<button type="button" class="crumb-btn" id="stu-bc-class">${escapeHTML(clsLabel)}</button>`;
+          bcHtml += `<span class="crumb-sep">/</span><span class="crumb-current">${escapeHTML(stuObj.name)}</span>`;
+        }
+      }
+      if (!state.stuDetailStudentId) {
+        bcHtml += `<span class="crumb-current">${escapeHTML(clsLabel)}</span>`;
+      }
+    }
+    bc.innerHTML = bcHtml;
+
+    const rootBtn = document.getElementById('stu-bc-root');
+    if (rootBtn) {
+      rootBtn.addEventListener('click', () => {
+        state.stuDetailClassId = null;
+        state.stuDetailStudentId = null;
+        state.stuDetailSearch = '';
+        state.stuDetailSectionFilter = 'ALL';
+        refreshStudentDetailModule();
+      });
+    }
+    const clsBtn = document.getElementById('stu-bc-class');
+    if (clsBtn) {
+      clsBtn.addEventListener('click', () => {
+        state.stuDetailStudentId = null;
+        refreshStudentDetailModule();
+      });
+    }
+
+    // LEVEL 0: Global Student Search + All 7 Class Boxes
+    if (!state.stuDetailClassId) {
+      const existingShell = document.getElementById('stu-level0-shell');
+      if (!existingShell) {
+        content.innerHTML = `
+          <div id="stu-level0-shell">
+            <div class="stu-search-banner">
+              <div class="search-box">
+                <span class="search-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <input type="search" id="stu-global-search" class="search-input" value="${escapeHTML(state.stuDetailGlobalSearch)}" placeholder="Search ALL students by name, roll #, father name, family #, phone, or WhatsApp..." autocomplete="off" />
+              </div>
+            </div>
+            <div id="stu-global-results"></div>
+            <div id="stu-classes-overview"></div>
+          </div>
+        `;
+        const gInp = document.getElementById('stu-global-search');
+        gInp.addEventListener('compositionstart', () => { state.stuDetailComposing = true; });
+        gInp.addEventListener('compositionend', (e) => {
+          state.stuDetailComposing = false;
+          state.stuDetailGlobalSearch = e.target.value;
+          renderStudentDetailGlobalResults();
+        });
+        gInp.addEventListener('input', (e) => {
+          state.stuDetailGlobalSearch = e.target.value;
+          if (!state.stuDetailComposing) renderStudentDetailGlobalResults();
+        });
+      }
+
+      const classes = window.AppStorage.getClasses();
+      const cards = [];
+      for (const c of classes) {
+        const stus = await window.AppStorage.getStudentsByClass(c.id);
+        const sections = Array.from(new Set(stus.map((s) => s.section).filter(Boolean)));
+        cards.push(`
+          <div class="drill-box stu-class-box" data-cid="${escapeHTML(c.id)}" tabindex="0" role="button">
+            <div class="drill-box-top">
+              <div>
+                <div class="drill-box-title">${escapeHTML(c.label)}</div>
+                <div class="drill-box-sub">${escapeHTML(stus.length)} ${stus.length === 1 ? 'Student' : 'Students'}${sections.length > 0 ? ` &bull; Sec: ${escapeHTML(sections.join(', '))}` : ''}</div>
+              </div>
+              <span class="drill-pill drill-pill-blue">${escapeHTML(c.badge || '')}</span>
+            </div>
+            <div class="drill-box-footer">
+              <span>Browse Class Student Details &rarr;</span>
+            </div>
+          </div>
+        `);
+      }
+      const classesWrap = document.getElementById('stu-classes-overview');
+      if (classesWrap) {
+        classesWrap.innerHTML = `<div class="drill-grid">${cards.join('')}</div>`;
+        classesWrap.querySelectorAll('.stu-class-box').forEach((box) => {
+          box.addEventListener('click', () => {
+            state.stuDetailClassId = box.dataset.cid;
+            state.stuDetailStudentId = null;
+            state.stuDetailSearch = '';
+            state.stuDetailComposing = false;
+            state.stuDetailSectionFilter = 'ALL';
+            refreshStudentDetailModule();
+          });
+        });
+      }
+      await renderStudentDetailGlobalResults();
+      return;
+    }
+
+    // LEVEL 1: Selected Class Student List
+    if (!state.stuDetailStudentId) {
+      const existingL1 = document.getElementById('stu-level1-shell');
+      const needsMount = !existingL1 || existingL1.dataset.classId !== String(state.stuDetailClassId);
+      if (needsMount) {
+        content.innerHTML = `
+          <div id="stu-level1-shell" data-class-id="${escapeHTML(state.stuDetailClassId)}">
+            <div style="margin-bottom:12px;">
+              <div class="search-box">
+                <span class="search-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <input type="search" id="stu-class-search" class="search-input" value="${escapeHTML(state.stuDetailSearch)}" placeholder="Search by name, roll #, father name, family #, phone, or WhatsApp..." autocomplete="off" />
+              </div>
+            </div>
+            <div id="stu-section-pills"></div>
+            <div id="stu-class-grid" class="drill-grid"></div>
+          </div>
+        `;
+        const cInp = document.getElementById('stu-class-search');
+        cInp.addEventListener('compositionstart', () => { state.stuDetailComposing = true; });
+        cInp.addEventListener('compositionend', (e) => {
+          state.stuDetailComposing = false;
+          state.stuDetailSearch = e.target.value;
+          renderStudentDetailClassStudents();
+        });
+        cInp.addEventListener('input', (e) => {
+          state.stuDetailSearch = e.target.value;
+          if (!state.stuDetailComposing) renderStudentDetailClassStudents();
+        });
+      }
+      await renderStudentDetailClassStudents();
+      return;
+    }
+
+    // LEVEL 2: Complete Student Detail Profile Page
+    const s = stuObj || await window.AppStorage.getStudentById(state.stuDetailStudentId);
+    if (!s) return;
+    const clsLabel = window.AppStorage.getClassLabel(s.classId || s.className);
+    const primaryPhone = s.phone && s.phone !== '-' ? s.phone : '';
+    const waDisplay = s.whatsapp && s.whatsapp !== '-' ? s.whatsapp : (primaryPhone || '-');
+    const waHrefNum = formatPhoneForWa(waDisplay !== '-' ? waDisplay : primaryPhone);
+    const telHrefNum = primaryPhone ? primaryPhone.replace(/[^\d+]/g, '') : '';
+
+    content.innerHTML = `
+      <div class="stu-detail-card">
+        <div class="stu-detail-head">
+          <div>
+            <h3 class="stu-detail-name">${escapeHTML(s.name)}</h3>
+            <div class="stu-detail-badges">
+              <span class="dossier-tag">${escapeHTML(clsLabel)} &bull; Section ${escapeHTML(s.section || 'General')}</span>
+              <span class="dossier-tag">Roll #${escapeHTML(s.rollNumber || '-')}</span>
+              <span class="dossier-tag">${escapeHTML(s.status || 'Active')}</span>
+              <span class="dossier-tag">${s.isOfficial ? 'Official Roster' : 'Custom Added'}</span>
+              ${s.hasOverride ? '<span class="dossier-tag">Edited</span>' : ''}
+            </div>
+          </div>
+          <div class="stu-detail-actions no-print">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-stu-edit">Edit Details</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-stu-detail-print">&#128424; Print</button>
+            ${s.hasOverride ? '<button type="button" class="btn btn-outline btn-sm" id="btn-stu-reset-official">Reset Official</button>' : ''}
+            ${!s.isOfficial ? '<button type="button" class="btn btn-danger btn-sm" id="btn-stu-delete-custom">Remove</button>' : ''}
+          </div>
+        </div>
+
+        <div class="stu-detail-grid">
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Student Name</span>
+            <span class="stu-detail-value">${escapeHTML(s.name)}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Student ID</span>
+            <span class="stu-detail-value">${escapeHTML(s.id)}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Class &amp; Section</span>
+            <span class="stu-detail-value">${escapeHTML(clsLabel)} &mdash; Section ${escapeHTML(s.section || 'General')}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Roll Number</span>
+            <span class="stu-detail-value">${escapeHTML(s.rollNumber || '-')}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Father / Guardian Name</span>
+            <span class="stu-detail-value">${escapeHTML(s.family || '-')}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Family Code / Number</span>
+            <span class="stu-detail-value">${escapeHTML(s.familyNumber || '-')}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Primary / Father Phone Number</span>
+            <span class="stu-detail-value">${escapeHTML(s.phone || '-')}</span>
+            ${telHrefNum ? `
+              <div class="stu-detail-phone-actions no-print">
+                <a class="btn btn-outline btn-sm" href="tel:${escapeHTML(telHrefNum)}">Call</a>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-stu-copy-phone">Copy</button>
+              </div>
+            ` : ''}
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">WhatsApp Number</span>
+            <span class="stu-detail-value">${escapeHTML(waDisplay)}</span>
+            ${waHrefNum ? `
+              <div class="stu-detail-phone-actions no-print">
+                <a class="btn btn-success btn-sm" href="https://wa.me/${escapeHTML(waHrefNum)}" target="_blank" rel="noopener">WhatsApp</a>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-stu-copy-wa">Copy</button>
+              </div>
+            ` : ''}
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Admission Date</span>
+            <span class="stu-detail-value">${escapeHTML(s.admitted || '-')}</span>
+          </div>
+          <div class="stu-detail-item">
+            <span class="stu-detail-label">Enrollment Status</span>
+            <span class="stu-detail-value">${escapeHTML(s.status || 'Active')}</span>
+          </div>
+          <div class="stu-detail-item stu-detail-item-full">
+            <span class="stu-detail-label">Additional Details / Address / Notes</span>
+            <span class="stu-detail-value" dir="auto">${escapeHTML(s.notes || 'No extra notes added.')}</span>
+          </div>
+        </div>
+
+        <div class="stu-detail-links-bar no-print">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-stu-open-grand">Open Grand Student Report &rarr;</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-stu-open-health">Open Health &amp; Medical Report &rarr;</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-stu-open-violations">Open Violation Record &rarr;</button>
+        </div>
+      </div>
+    `;
+
+    const editBtn = document.getElementById('btn-stu-edit');
+    if (editBtn) editBtn.addEventListener('click', () => openStudentDetailForm(s));
+
+    const printBtn = document.getElementById('btn-stu-detail-print');
+    if (printBtn) printBtn.addEventListener('click', () => window.print());
+
+    const copyPhoneBtn = document.getElementById('btn-stu-copy-phone');
+    if (copyPhoneBtn) copyPhoneBtn.addEventListener('click', () => copyTextSafe(s.phone, 'Phone number'));
+
+    const copyWaBtn = document.getElementById('btn-stu-copy-wa');
+    if (copyWaBtn) copyWaBtn.addEventListener('click', () => copyTextSafe(waDisplay, 'WhatsApp number'));
+
+    const resetBtn = document.getElementById('btn-stu-reset-official');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        openConfirmDialog({
+          title: 'Reset to Official Student Record?',
+          message: `Revert custom edits for ${s.name} back to the original school directory record?`,
+          confirmLabel: 'Reset Record',
+          onConfirm: async () => {
+            await window.AppStorage.resetOfficialStudentDetails(s.id);
+            showToast(`Restored original details for ${s.name}.`, 'success');
+            await refreshStudentDetailModule();
+            await updateHomeStats();
+          }
+        });
+      });
+    }
+
+    const delBtn = document.getElementById('btn-stu-delete-custom');
+    if (delBtn) {
+      delBtn.addEventListener('click', () => {
+        openConfirmDialog({
+          title: 'Remove Custom Student?',
+          message: `Remove ${s.name} from the directory? (Only allowed when no attendance, violations, homework, health, or test records exist.)`,
+          confirmLabel: 'Remove Student',
+          onConfirm: async () => {
+            try {
+              await window.AppStorage.deleteCustomStudent(s.id);
+              state.stuDetailStudentId = null;
+              showToast(`Removed ${s.name}.`, 'success');
+              await refreshStudentDetailModule();
+              await updateHomeStats();
+            } catch (err) {
+              showToast(err.message || 'Unable to remove student.', 'error', 4500);
+            }
+          }
+        });
+      });
+    }
+
+    const openGrandBtn = document.getElementById('btn-stu-open-grand');
+    if (openGrandBtn) openGrandBtn.addEventListener('click', () => window.PortalBridge.openGrandReport(s.id));
+
+    const openHealthBtn = document.getElementById('btn-stu-open-health');
+    if (openHealthBtn) {
+      openHealthBtn.addEventListener('click', () => {
+        state.healthClassId = window.AppStorage.normalizeClassId(s.classId || s.className);
+        state.healthStudentId = s.id;
+        state.healthFormOpen = false;
+        switchScreen('health');
+      });
+    }
+
+    const openViolBtn = document.getElementById('btn-stu-open-violations');
+    if (openViolBtn) {
+      openViolBtn.addEventListener('click', async () => {
+        const stats = await window.AppStorage.getStudentsWithStats();
+        const found = stats.find((x) => x.id === s.id);
+        if (found) {
+          openViolationDetailModal(s.id);
+        } else {
+          switchScreen('violations');
+          switchViolationSubTab('form');
+          document.getElementById('input-student-id').value = s.id;
+          document.getElementById('select-class').value = window.AppStorage.normalizeClassId(s.classId || s.className);
+          document.getElementById('input-student-name').value = s.name;
+          await updateViolationMatchStatus();
+        }
+      });
+    }
+  }
+
+  /* ========================================================================
      MODULE 3: Monthly Tests & Marks
      ======================================================================== */
   async function refreshTestsModule() {
@@ -3621,14 +4287,7 @@
     };
 
     // WhatsApp message formatter
-    const cleanPhoneForWa = (num) => {
-      if (!num || num === '-' || num === '—') return '';
-      let p = num.replace(/[^\d+]/g, '');
-      if (p.startsWith('03')) p = '92' + p.slice(1);
-      else if (p.startsWith('+')) p = p.slice(1);
-      return p;
-    };
-    const waNumber = cleanPhoneForWa(s.whatsapp || s.phone);
+    const waNumber = formatPhoneForWa(s.whatsapp || s.phone);
     const waSummaryText = encodeURIComponent(
       `*Hadi Education System Balkassar — Student Grand Report*\n` +
       `Student: *${s.name}* (Roll #${s.rollNumber})\n` +
@@ -4142,6 +4801,18 @@
         }, 40);
       });
     }
+    const qaStuDetail = document.getElementById('qa-student-detail');
+    if (qaStuDetail) {
+      qaStuDetail.addEventListener('click', () => {
+        state.stuFormOpen = false;
+        state.stuFormDirty = false;
+        switchScreen('student-details');
+        setTimeout(() => {
+          const inp = document.getElementById('stu-global-search');
+          if (inp) inp.focus();
+        }, 40);
+      });
+    }
     const qaGrand = document.getElementById('qa-find-student');
     if (qaGrand) {
       qaGrand.addEventListener('click', () => {
@@ -4446,9 +5117,37 @@
     });
     document.getElementById('health-record-form').addEventListener('submit', handleHealthFormSubmit);
 
+    // Student Detail & Directory Form Events
+    const stuAddBtn = document.getElementById('btn-stu-detail-add');
+    if (stuAddBtn) stuAddBtn.addEventListener('click', () => openStudentDetailForm(null));
+    const stuBackBtn = document.getElementById('btn-stu-form-back');
+    if (stuBackBtn) stuBackBtn.addEventListener('click', () => closeStudentDetailForm());
+    const stuCancelBtn = document.getElementById('btn-stu-form-cancel');
+    if (stuCancelBtn) stuCancelBtn.addEventListener('click', () => closeStudentDetailForm());
+    const stuForm = document.getElementById('stu-detail-form');
+    if (stuForm) {
+      stuForm.addEventListener('submit', handleStudentDetailFormSubmit);
+      stuForm.addEventListener('input', (e) => {
+        state.stuFormDirty = true;
+        if (e.target && e.target.id === 'stu-input-name') {
+          e.target.classList.remove('is-invalid');
+          const v = document.getElementById('val-stu-name');
+          if (v) v.classList.remove('visible');
+        }
+      });
+      stuForm.addEventListener('change', (e) => {
+        state.stuFormDirty = true;
+        if (e.target && e.target.id === 'stu-select-class') {
+          e.target.classList.remove('is-invalid');
+          const v = document.getElementById('val-stu-class');
+          if (v) v.classList.remove('visible');
+        }
+      });
+    }
+
     // Unsaved marks browser unload protection
     window.addEventListener('beforeunload', (e) => {
-      if (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm()) {
+      if (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm()) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -4511,7 +5210,7 @@
     });
 
     // Service Worker Safe Update Helpers
-    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || !!state.hwFormOpen;
+    window.__hesHasUnsavedWork = () => hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm() || !!state.hwFormOpen;
     window.__hesConfirmAndApplyUpdate = (worker) => {
       openConfirmDialog({
         title: 'Apply Portal Update?',
@@ -4524,11 +5223,114 @@
           state.paDirty = false;
           state.healthDirty = false;
           state.healthFormOpen = false;
+          state.stuFormDirty = false;
+          state.stuFormOpen = false;
           if (worker) worker.postMessage({ type: 'SKIP_WAITING' });
         }
       });
     };
   }
+
+  /* ========================================================================
+     Portal Bridge (Safe Public Surface for Assistant Module)
+     ======================================================================== */
+  window.PortalBridge = {
+    showToast,
+    switchScreen: (screenName, bypassDirtyCheck = false) => {
+      if (!SCREEN_META[screenName]) return false;
+      switchScreen(screenName, bypassDirtyCheck);
+      return true;
+    },
+    getCurrentScreen: () => state.currentScreen,
+    hasUnsavedWork: (area = null) => {
+      if (area === 'tests') return hasUnsavedTestMarks();
+      if (area === 'class-attendance') return hasUnsavedAttendance('class');
+      if (area === 'prep-attendance') return hasUnsavedAttendance('prep');
+      if (area === 'homework') return !!state.hwFormOpen;
+      if (area === 'health') return hasUnsavedHealthForm();
+      if (area === 'student-details') return hasUnsavedStudentForm();
+      return hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm() || !!state.hwFormOpen;
+    },
+    getUnsavedState: () => ({
+      any: hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm() || !!state.hwFormOpen,
+      currentScreen: state.currentScreen,
+      areas: {
+        tests: hasUnsavedTestMarks()
+          ? { testId: state.testId, classId: state.testClassId, subject: state.testSubject }
+          : null,
+        'class-attendance': hasUnsavedAttendance('class')
+          ? { classId: state.caClassId, subject: state.caSubject, date: state.caDate }
+          : null,
+        'prep-attendance': hasUnsavedAttendance('prep')
+          ? { classId: state.paClassId, prepSlot: state.paPrepSlot, date: state.paDate }
+          : null,
+        homework: state.hwFormOpen
+          ? { editingId: state.hwEditingId, draftMeta: state.hwDraftMeta ? { ...state.hwDraftMeta } : null }
+          : null,
+        health: hasUnsavedHealthForm() ? { open: true } : null,
+        'student-details': hasUnsavedStudentForm() ? { open: true } : null
+      }
+    }),
+    refreshAll: async () => {
+      await updateHomeStats();
+      const scr = state.currentScreen;
+      if (scr === 'violations') await refreshViolationsModule();
+      else if (scr === 'homework') await refreshHomeworkModule();
+      else if (scr === 'class-attendance' && !hasUnsavedAttendance('class')) await refreshAttendanceModule('class');
+      else if (scr === 'prep-attendance' && !hasUnsavedAttendance('prep')) await refreshAttendanceModule('prep');
+      else if (scr === 'health' && !hasUnsavedHealthForm()) await refreshHealthModule();
+      else if (scr === 'student-details' && !hasUnsavedStudentForm()) await refreshStudentDetailModule();
+      else if (scr === 'tests' && !hasUnsavedTestMarks()) await refreshTestsModule();
+      else if (scr === 'grand-report') await refreshGrandReportModule();
+    },
+    openStudentDetail: async (studentId) => {
+      const stu = studentId ? await window.AppStorage.getStudentById(studentId) : null;
+      const apply = () => {
+        if (stu) {
+          state.stuDetailClassId = window.AppStorage.normalizeClassId(stu.classId || stu.className);
+          state.stuDetailStudentId = stu.id;
+        } else {
+          state.stuDetailClassId = null;
+          state.stuDetailStudentId = null;
+        }
+        state.stuFormOpen = false;
+        state.stuFormDirty = false;
+        switchScreen('student-details', true);
+      };
+      if (
+        state.currentScreen !== 'student-details' &&
+        (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm())
+      ) {
+        guardUnsavedPortalEdits(apply);
+        return { ok: true, pendingGuard: true };
+      }
+      apply();
+      return { ok: true, studentId: stu ? stu.id : null };
+    },
+    openGrandReport: async (studentId) => {
+      const stu = studentId ? await window.AppStorage.getStudentById(studentId) : null;
+      const apply = () => {
+        if (stu) {
+          state.grandClassId = window.AppStorage.normalizeClassId(stu.classId || stu.className);
+          state.grandStudentId = stu.id;
+        } else {
+          state.grandClassId = null;
+          state.grandStudentId = null;
+        }
+        switchScreen('grand-report', true);
+      };
+      if (
+        state.currentScreen !== 'grand-report' &&
+        (hasUnsavedTestMarks() || hasUnsavedAttendance() || hasUnsavedHealthForm() || hasUnsavedStudentForm())
+      ) {
+        guardUnsavedPortalEdits(apply);
+        return { ok: true, pendingGuard: true };
+      }
+      apply();
+      return { ok: true, studentId: stu ? stu.id : null };
+    },
+    escapeHTML
+  };
 
   /* ========================================================================
      Initialization

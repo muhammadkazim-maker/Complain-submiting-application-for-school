@@ -9,6 +9,7 @@
 
   const KEYS = {
     CUSTOM_STUDENTS: 'hes_custom_students_v2',
+    STUDENT_OVERRIDES: 'hes_student_overrides_v1',
     COMPLAINTS: 'sct_complaints_v1',
     HOMEWORKS: 'hes_homeworks_v2',
     TESTS: 'hes_monthly_tests_v2',
@@ -16,6 +17,12 @@
     CLASS_ATTENDANCE: 'hes_class_attendance_v1',
     PREP_ATTENDANCE: 'hes_prep_attendance_v1',
     HEALTH_RECORDS: 'hes_health_records_v1'
+  };
+
+  // Stored separately from KEYS so backups/snapshots never capture API keys or transcripts
+  const ASSISTANT_KEYS = {
+    SETTINGS: 'hes_ai_settings_v1',
+    TRANSCRIPT: 'hes_ai_transcript_v1'
   };
 
   const PREP_SLOTS = ['Prep 1', 'Prep 2', 'Prep 3'];
@@ -414,12 +421,27 @@
     },
 
     /* ========================================================================
-       Students Roster (Official 134 + Custom)
+       Students Roster (Official 134 + Edits/Overrides + Custom Additions)
        ======================================================================== */
     async getAllRosterStudents() {
       const official = (window.SchoolDirectory && window.SchoolDirectory.OFFICIAL_STUDENTS) || [];
+      const overrides = load(KEYS.STUDENT_OVERRIDES, {});
       const custom = load(KEYS.CUSTOM_STUDENTS, []);
-      return [...official, ...custom];
+      const mergedOfficial = official.map((stu) => {
+        const ov = isPlainObject(overrides) && isPlainObject(overrides[stu.id]) ? overrides[stu.id] : null;
+        if (!ov) return stu;
+        const nextClass = ov.classId ? normalizeClassId(ov.classId) : (stu.classId || stu.className);
+        return {
+          ...stu,
+          ...ov,
+          id: stu.id,
+          classId: nextClass,
+          className: nextClass,
+          isOfficial: true,
+          hasOverride: true
+        };
+      });
+      return [...mergedOfficial, ...custom];
     },
 
     async getStudentsByClass(classId) {
@@ -431,6 +453,144 @@
     async getStudentById(studentId) {
       const all = await this.getAllRosterStudents();
       return all.find((s) => s.id === studentId) || null;
+    },
+
+    async saveStudentDetails({
+      studentId = null,
+      name,
+      rollNumber = '-',
+      classId,
+      section = 'General',
+      family = '-',
+      familyNumber = '',
+      phone = '-',
+      whatsapp = '',
+      admitted = '',
+      status = 'Active',
+      notes = ''
+    }) {
+      const cleanName = normalizeText(name);
+      const cid = normalizeClassId(classId);
+      if (!cleanName) throw new Error('Student name is required.');
+      const validClasses = new Set(this.getClasses().map((c) => normalizeClassId(c.id)));
+      if (!cid || !validClasses.has(cid)) throw new Error('Valid class (6th–12th) is required.');
+
+      const cleanRoll = normalizeText(rollNumber) || '-';
+      const cleanSec = normalizeText(section) || 'General';
+      const cleanFamily = normalizeText(family) || '-';
+      const cleanFamNo = normalizeText(familyNumber);
+      const cleanPhone = normalizeText(phone) || '-';
+      const cleanWa = normalizeText(whatsapp) || (cleanPhone !== '-' ? cleanPhone : '-');
+      const cleanAdmitted = normalizeText(admitted);
+      const cleanStatus = normalizeText(status) || 'Active';
+      const cleanNotes = typeof notes === 'string' ? notes.trim() : '';
+
+      const official = (window.SchoolDirectory && window.SchoolDirectory.OFFICIAL_STUDENTS) || [];
+      const officialTarget = studentId ? official.find((s) => s.id === studentId) : null;
+
+      if (officialTarget) {
+        const overrides = load(KEYS.STUDENT_OVERRIDES, {});
+        const safeMap = isPlainObject(overrides) ? { ...overrides } : {};
+        safeMap[officialTarget.id] = {
+          name: cleanName,
+          rollNumber: cleanRoll,
+          classId: cid,
+          className: cid,
+          section: cleanSec,
+          family: cleanFamily,
+          familyNumber: cleanFamNo,
+          phone: cleanPhone,
+          whatsapp: cleanWa,
+          admitted: cleanAdmitted || officialTarget.admitted || '-',
+          status: cleanStatus,
+          notes: cleanNotes,
+          updatedAt: new Date().toISOString()
+        };
+        saveOrThrow(KEYS.STUDENT_OVERRIDES, safeMap, 'student details update');
+        this._notifyChange();
+        return await this.getStudentById(officialTarget.id);
+      }
+
+      const custom = load(KEYS.CUSTOM_STUDENTS, []);
+      if (studentId) {
+        const idx = custom.findIndex((s) => s.id === studentId);
+        if (idx === -1) throw new Error('Selected student was not found.');
+        custom[idx] = {
+          ...custom[idx],
+          name: cleanName,
+          rollNumber: cleanRoll,
+          classId: cid,
+          className: cid,
+          section: cleanSec,
+          family: cleanFamily,
+          familyNumber: cleanFamNo,
+          phone: cleanPhone,
+          whatsapp: cleanWa,
+          admitted: cleanAdmitted || custom[idx].admitted || '-',
+          status: cleanStatus,
+          notes: cleanNotes,
+          isOfficial: false,
+          updatedAt: new Date().toISOString()
+        };
+        saveOrThrow(KEYS.CUSTOM_STUDENTS, custom, 'custom student update');
+        this._notifyChange();
+        return custom[idx];
+      }
+
+      const newStudent = {
+        id: generateId('std'),
+        name: cleanName,
+        rollNumber: cleanRoll,
+        classId: cid,
+        className: cid,
+        section: cleanSec,
+        family: cleanFamily,
+        familyNumber: cleanFamNo,
+        phone: cleanPhone,
+        whatsapp: cleanWa,
+        admitted: cleanAdmitted || getLocalTodayDate(),
+        status: cleanStatus,
+        notes: cleanNotes,
+        isOfficial: false,
+        createdAt: new Date().toISOString()
+      };
+      custom.push(newStudent);
+      saveOrThrow(KEYS.CUSTOM_STUDENTS, custom, 'new student profile');
+      this._notifyChange();
+      return newStudent;
+    },
+
+    async resetOfficialStudentDetails(studentId) {
+      const overrides = load(KEYS.STUDENT_OVERRIDES, {});
+      if (!isPlainObject(overrides) || !overrides[studentId]) {
+        return false;
+      }
+      const next = { ...overrides };
+      delete next[studentId];
+      saveOrThrow(KEYS.STUDENT_OVERRIDES, next, 'reset student details');
+      this._notifyChange();
+      return true;
+    },
+
+    async deleteCustomStudent(studentId) {
+      const custom = load(KEYS.CUSTOM_STUDENTS, []);
+      const target = custom.find((s) => s.id === studentId);
+      if (!target) throw new Error('Only added custom students can be removed here.');
+
+      const hasViol = (await this.getComplaints()).some((c) => c.studentId === studentId);
+      const hasHealth = (await this.getHealthRecords()).some((h) => h.studentId === studentId);
+      const hasHw = (await this.getHomeworks()).some((h) => h.records && h.records[studentId]);
+      const hasClassAtt = (await this.getClassAttendance()).some((e) => e.records && e.records[studentId]);
+      const hasPrepAtt = (await this.getPrepAttendance()).some((e) => e.records && e.records[studentId]);
+      const hasTest = (await this.getTests()).some((t) => t.marks && Object.values(t.marks).some((m) => m && m[studentId] !== undefined));
+      if (hasViol || hasHealth || hasHw || hasClassAtt || hasPrepAtt || hasTest) {
+        throw new Error('Cannot remove student with existing attendance, violations, homework, health, or test records.');
+      }
+
+      const filtered = custom.filter((s) => s.id !== studentId);
+      saveOrThrow(KEYS.CUSTOM_STUDENTS, filtered, 'remove custom student');
+      this._notifyChange();
+      return { success: true };
     },
 
     /* ========================================================================
@@ -1518,6 +1678,7 @@
         version: '2.0',
         exportedAt: new Date().toISOString(),
         customStudents: load(KEYS.CUSTOM_STUDENTS, []),
+        studentOverrides: load(KEYS.STUDENT_OVERRIDES, {}),
         complaints: load(KEYS.COMPLAINTS, []),
         homeworks: load(KEYS.HOMEWORKS, []),
         tests: load(KEYS.TESTS, []),
@@ -1553,6 +1714,7 @@
 
       const hasAnySection = [
         'customStudents',
+        'studentOverrides',
         'complaints',
         'homeworks',
         'tests',
@@ -1567,6 +1729,9 @@
 
       if (data.customStudents !== undefined && !Array.isArray(data.customStudents)) {
         throw new Error('Invalid backup: "customStudents" must be an array.');
+      }
+      if (data.studentOverrides !== undefined && !isPlainObject(data.studentOverrides)) {
+        throw new Error('Invalid backup: "studentOverrides" must be an object.');
       }
       if (data.complaints !== undefined && !Array.isArray(data.complaints)) {
         throw new Error('Invalid backup: "complaints" must be an array.');
@@ -1622,12 +1787,41 @@
           className: cid,
           section: typeof s.section === 'string' && s.section.trim() ? normalizeText(s.section) : 'Custom',
           family: typeof s.family === 'string' ? normalizeText(s.family) : '-',
+          familyNumber: typeof s.familyNumber === 'string' ? normalizeText(s.familyNumber) : '',
           phone: typeof s.phone === 'string' ? normalizeText(s.phone) : '-',
           whatsapp: typeof s.whatsapp === 'string' ? normalizeText(s.whatsapp) : '-',
+          admitted: typeof s.admitted === 'string' && s.admitted.trim() ? normalizeText(s.admitted) : '-',
+          status: typeof s.status === 'string' && s.status.trim() ? normalizeText(s.status) : 'Active',
+          notes: typeof s.notes === 'string' ? s.notes.trim() : '',
           isOfficial: false,
           createdAt: s.createdAt || new Date().toISOString()
         };
       });
+
+      const cleanStudentOverrides = {};
+      if (isPlainObject(data.studentOverrides)) {
+        for (const [sid, ov] of Object.entries(data.studentOverrides)) {
+          if (!officialIds.has(sid) || !isPlainObject(ov)) continue;
+          const cleanName = normalizeText(ov.name);
+          const cid = normalizeClassId(ov.classId || ov.className);
+          if (!cleanName || !validClasses.has(cid)) continue;
+          cleanStudentOverrides[sid] = {
+            name: cleanName,
+            rollNumber: typeof ov.rollNumber === 'string' && ov.rollNumber.trim() ? normalizeText(ov.rollNumber) : '-',
+            classId: cid,
+            className: cid,
+            section: typeof ov.section === 'string' && ov.section.trim() ? normalizeText(ov.section) : 'General',
+            family: typeof ov.family === 'string' ? normalizeText(ov.family) : '-',
+            familyNumber: typeof ov.familyNumber === 'string' ? normalizeText(ov.familyNumber) : '',
+            phone: typeof ov.phone === 'string' ? normalizeText(ov.phone) : '-',
+            whatsapp: typeof ov.whatsapp === 'string' ? normalizeText(ov.whatsapp) : '-',
+            admitted: typeof ov.admitted === 'string' && ov.admitted.trim() ? normalizeText(ov.admitted) : '-',
+            status: typeof ov.status === 'string' && ov.status.trim() ? normalizeText(ov.status) : 'Active',
+            notes: typeof ov.notes === 'string' ? ov.notes.trim() : '',
+            updatedAt: isValidDateString(ov.updatedAt) ? ov.updatedAt : new Date().toISOString()
+          };
+        }
+      }
 
       const validStudentIds = new Set([...officialIds, ...customIds]);
       const seenComplaintIds = new Set();
@@ -1869,8 +2063,10 @@
       );
 
       const subjClassesCount = Object.keys(cleanSubjects).length;
+      const overridesCount = Object.keys(cleanStudentOverrides).length;
       const totalItems =
         cleanCustomStudents.length +
+        overridesCount +
         cleanComplaints.length +
         cleanHomeworks.length +
         cleanTests.length +
@@ -1888,6 +2084,7 @@
           version: data.version.trim(),
           exportedAt: data.exportedAt || null,
           customStudentsCount: cleanCustomStudents.length,
+          studentOverridesCount: overridesCount,
           complaintsCount: cleanComplaints.length,
           homeworksCount: cleanHomeworks.length,
           testsCount: cleanTests.length,
@@ -1898,6 +2095,7 @@
         },
         sanitizedData: {
           customStudents: cleanCustomStudents,
+          studentOverrides: cleanStudentOverrides,
           complaints: cleanComplaints,
           homeworks: cleanHomeworks,
           tests: cleanTests,
@@ -1968,6 +2166,7 @@
 
       try {
         saveOrThrow(KEYS.CUSTOM_STUDENTS, clean.customStudents, 'custom students backup');
+        saveOrThrow(KEYS.STUDENT_OVERRIDES, clean.studentOverrides, 'student details backup');
         saveOrThrow(KEYS.COMPLAINTS, clean.complaints, 'violations backup');
         saveOrThrow(KEYS.HOMEWORKS, clean.homeworks, 'homeworks backup');
         saveOrThrow(KEYS.TESTS, clean.tests, 'monthly tests backup');
@@ -1983,6 +2182,7 @@
       this._notifyChange();
       return {
         customStudentsCount: clean.customStudents.length,
+        studentOverridesCount: Object.keys(clean.studentOverrides || {}).length,
         complaintsCount: clean.complaints.length,
         homeworksCount: clean.homeworks.length,
         testsCount: clean.tests.length,
@@ -2006,6 +2206,77 @@
         localStorage.removeItem('sct_students_v1');
       } catch (e) {
         console.error('Legacy cleanup error:', e);
+      }
+    },
+
+    /* ========================================================================
+       AI Assistant Settings & Transcript (Excluded from JSON/CSV backups)
+       ======================================================================== */
+    getAssistantSettings() {
+      const saved = load(ASSISTANT_KEYS.SETTINGS, null);
+      const model = saved && typeof saved.model === 'string' && saved.model.trim()
+        ? saved.model.trim()
+        : 'gemini-3.8-flash';
+      let apiKey = saved && typeof saved.apiKey === 'string' ? saved.apiKey.trim() : '';
+      let proxyUrl = saved && typeof saved.proxyUrl === 'string' ? saved.proxyUrl.trim() : '';
+      if (!apiKey && !proxyUrl) {
+        proxyUrl = '/api/ai/relay';
+      }
+      return { apiKey, model, proxyUrl };
+    },
+
+    saveAssistantSettings(settings = {}) {
+      const current = this.getAssistantSettings();
+      const apiKey = typeof settings.apiKey === 'string' ? settings.apiKey.trim() : current.apiKey;
+      const model = typeof settings.model === 'string' && settings.model.trim()
+        ? settings.model.trim()
+        : 'gemini-3.8-flash';
+      const proxyUrl = typeof settings.proxyUrl === 'string' ? settings.proxyUrl.trim() : current.proxyUrl;
+      const payload = { apiKey, model, proxyUrl };
+      saveOrThrow(ASSISTANT_KEYS.SETTINGS, payload, 'assistant settings');
+      return { ...payload };
+    },
+
+    getAssistantTranscript() {
+      const list = load(ASSISTANT_KEYS.TRANSCRIPT, []);
+      if (!Array.isArray(list)) return [];
+      return list
+        .filter((m) => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+        .slice(-50)
+        .map((m) => ({
+          id: typeof m.id === 'string' ? m.id : generateId('msg'),
+          role: m.role,
+          text: m.text,
+          timestamp: typeof m.timestamp === 'string' ? m.timestamp : new Date().toISOString(),
+          isError: !!m.isError
+        }));
+    },
+
+    saveAssistantTranscript(messages) {
+      if (!Array.isArray(messages)) {
+        throw new Error('Assistant transcript must be an array.');
+      }
+      const clean = messages
+        .filter((m) => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+        .slice(-50)
+        .map((m) => ({
+          id: typeof m.id === 'string' ? m.id : generateId('msg'),
+          role: m.role,
+          text: m.text,
+          timestamp: typeof m.timestamp === 'string' ? m.timestamp : new Date().toISOString(),
+          isError: !!m.isError
+        }));
+      saveOrThrow(ASSISTANT_KEYS.TRANSCRIPT, clean, 'assistant transcript');
+      return clean;
+    },
+
+    clearAssistantTranscript() {
+      try {
+        localStorage.removeItem(ASSISTANT_KEYS.TRANSCRIPT);
+        return true;
+      } catch (e) {
+        console.error('Assistant transcript clear error:', e);
+        throw new Error('Unable to clear assistant chat transcript.');
       }
     },
 

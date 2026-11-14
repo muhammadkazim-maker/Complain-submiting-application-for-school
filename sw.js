@@ -5,7 +5,7 @@
  * that could interrupt unsaved work.
  */
 
-const CACHE_NAME = 'hes-portal-v6';
+const CACHE_NAME = 'hes-portal-v10';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,6 +13,10 @@ const ASSETS_TO_CACHE = [
   './students_data.js',
   './storage.js',
   './app.js',
+  './gemini-client.js',
+  './assistant-tools.js',
+  './assistant.js',
+  './erp-client.js',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',
