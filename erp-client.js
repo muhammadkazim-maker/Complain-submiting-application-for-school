@@ -227,7 +227,20 @@
 
   function injectERPSidebarItems() {
     const nav = document.querySelector('.sidebar-nav');
-    if (!nav || nav.dataset.erpInjected) return;
+    if (!nav) return;
+    if (nav.dataset.erpInjected || document.getElementById('desk-nav-fees')) {
+      nav.dataset.erpInjected = 'true';
+      // Bind handlers to existing ERP links
+      nav.querySelectorAll('[data-screen]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetScreen = btn.dataset.screen;
+          if (ERP_SCREENS[targetScreen]) {
+            activateERPScreen(targetScreen);
+          }
+        });
+      });
+      return;
+    }
     nav.dataset.erpInjected = 'true';
 
     // Insert Divider: Financial & Operations
@@ -400,13 +413,22 @@
       el.classList.toggle('active', el.dataset.screen === screenName);
     });
 
-    // Update topbar titles
+    // Update topbar titles & breadcrumbs
     const meta = ERP_SCREENS[screenName];
     if (meta) {
       const titleEl = document.getElementById('topbar-page-title');
       const subEl = document.getElementById('topbar-page-subtitle');
       if (titleEl) titleEl.textContent = meta.title;
       if (subEl) subEl.textContent = meta.subtitle;
+
+      const crumbSection = document.getElementById('topbar-crumb-section');
+      const crumbActive = document.getElementById('topbar-crumb-active');
+      if (crumbSection) {
+        if (['fees', 'accounting', 'payroll'].includes(screenName)) crumbSection.textContent = 'Finance & HR';
+        else if (screenName === 'exams') crumbSection.textContent = 'Academics';
+        else crumbSection.textContent = 'Communication & Admin';
+      }
+      if (crumbActive) crumbActive.textContent = meta.title;
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1742,12 +1764,18 @@
   // ============================================================================
   // INITIALIZATION & PUBLIC BRIDGE
   // ============================================================================
-  document.addEventListener('DOMContentLoaded', () => {
+  function initAll() {
     initThemeSwitcher();
     initAuth();
     injectERPSidebarItems();
     injectHomeQuickActions();
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
 
   // Public surface
   window.HesERP = {
