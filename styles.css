@@ -1295,6 +1295,8 @@ body {
 .badge-green { background: var(--success-soft); color: var(--success); }
 .badge-amber { background: var(--warning-soft); color: var(--warning); }
 .badge-teal { background: var(--primary-soft); color: var(--primary); }
+.badge-rose { background: var(--danger-soft); color: var(--danger); }
+.badge-blue { background: rgba(14, 165, 233, 0.12); color: #0EA5E9; }
 
 /* DUAL VISUAL TREND CHARTS */
 .dashboard-charts-grid {

@@ -7,9 +7,12 @@ import os
 import sys
 import json
 import sqlite3
+import io
+import re
 import secrets
+import urllib.parse
 from datetime import datetime, date
-from flask import Flask, request, jsonify, send_from_directory, g
+from flask import Flask, request, jsonify, send_from_directory, g, Response
 
 # Ensure backend directory is in path
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1491,6 +1494,351 @@ def api_ai_query():
         "handledBy": "Hadi AI Scoped Backend Engine",
         "notice": "Query processed under verified server permissions."
     })
+
+# ==============================================================================
+# 22 — STUDENT & CLASS REPORTS (EXCEL WITH NATIVE CHARTS & BULK EXPORTS)
+# ==============================================================================
+
+@app.route("/api/reports/filter-options", methods=["GET"])
+@require_auth()
+def api_reports_filter_options():
+    conn = get_db()
+    c = conn.cursor()
+    user = g.current_user
+
+    # Sessions
+    c.execute("SELECT id, name, is_active FROM academic_sessions ORDER BY is_active DESC, name ASC")
+    sessions = [dict(r) for r in c.fetchall()]
+
+    # Classes
+    c.execute("SELECT id, name FROM classes ORDER BY id ASC")
+    all_classes = [dict(r) for r in c.fetchall()]
+
+    # Filter classes if teacher
+    if user["role"] == "teacher" and user.get("linked_staff_id"):
+        c.execute("SELECT DISTINCT class_id FROM staff_assignments WHERE staff_id = ?", (user["linked_staff_id"],))
+        allowed_cls = {r[0] for r in c.fetchall()}
+        classes = [cls for cls in all_classes if cls["id"] in allowed_cls]
+    else:
+        classes = all_classes
+
+    # Sections
+    c.execute("SELECT id, name, class_id FROM sections ORDER BY name ASC")
+    sections = [dict(r) for r in c.fetchall()]
+
+    # Exam cycles
+    c.execute("SELECT id, name, session_id FROM exam_cycles ORDER BY start_date DESC")
+    cycles = [dict(r) for r in c.fetchall()]
+
+    # Subjects
+    c.execute("SELECT id, name, class_id FROM subjects ORDER BY name ASC")
+    subjects = [dict(r) for r in c.fetchall()]
+
+    # Students
+    stu_q = """
+    SELECT id, admission_no, roll_number, name, father_name, current_class_id, current_section
+    FROM students WHERE status = 'Active'
+    """
+    params = []
+    if user["role"] == "parent":
+        stids = user.get("linked_student_ids") or []
+        if isinstance(stids, str):
+            stids = json.loads(stids) if stids.startswith("[") else [stids]
+        if stids:
+            placeholders = ",".join(["?"] * len(stids))
+            stu_q += f" AND id IN ({placeholders})"
+            params.extend(stids)
+        else:
+            stu_q += " AND 1=0"
+    elif user["role"] == "teacher" and user.get("linked_staff_id"):
+        if classes:
+            placeholders = ",".join(["?"] * len(classes))
+            stu_q += f" AND current_class_id IN ({placeholders})"
+            params.extend([cls["id"] for cls in classes])
+
+    stu_q += " ORDER BY current_class_id, roll_number, name"
+    c.execute(stu_q, params)
+    students = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+    return jsonify({
+        "success": True,
+        "sessions": sessions,
+        "classes": classes,
+        "sections": sections,
+        "examCycles": cycles,
+        "subjects": subjects,
+        "students": students,
+        "userRole": user["role"]
+    })
+
+@app.route("/api/reports/preview", methods=["GET"])
+@require_auth()
+def api_reports_preview():
+    scope = request.args.get("scope", "student").lower()
+    student_id = request.args.get("student_id")
+    class_id = request.args.get("class_id")
+    section_id = request.args.get("section_id")
+    session_id = request.args.get("session_id")
+    exam_cycle_id = request.args.get("exam_cycle_id")
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    modules_str = request.args.get("modules", "academics,attendance,fees,conduct")
+    selected_modules = [m.strip().lower() for m in modules_str.split(",") if m.strip()]
+
+    conn = get_db()
+    user = g.current_user
+
+    # RBAC checks
+    if user["role"] == "parent":
+        if scope != "student":
+            conn.close()
+            return jsonify({"error": "Parents can only view individual student reports for their children."}), 403
+        stids = user.get("linked_student_ids") or []
+        if isinstance(stids, str):
+            stids = json.loads(stids) if stids.startswith("[") else [stids]
+        if student_id not in stids:
+            conn.close()
+            return jsonify({"error": "Access denied to unlinked student report."}), 403
+
+    if user["role"] == "teacher" and user.get("linked_staff_id"):
+        c = conn.cursor()
+        c.execute("SELECT DISTINCT class_id FROM staff_assignments WHERE staff_id = ?", (user["linked_staff_id"],))
+        allowed_cls = {r[0] for r in c.fetchall()}
+        if scope == "class" and class_id not in allowed_cls:
+            conn.close()
+            return jsonify({"error": "Access denied: Class not assigned to teacher."}), 403
+        elif scope == "student":
+            c.execute("SELECT current_class_id FROM students WHERE id = ?", (student_id,))
+            st_row = c.fetchone()
+            if not st_row or st_row[0] not in allowed_cls:
+                conn.close()
+                return jsonify({"error": "Access denied: Student not in teacher's assigned class."}), 403
+        if "fees" in selected_modules:
+            selected_modules.remove("fees")
+
+    try:
+        import backend.reports_service as reports_service
+    except ImportError:
+        import reports_service
+
+    if scope == "student":
+        if not student_id:
+            conn.close()
+            return jsonify({"error": "student_id is required for student report preview."}), 400
+        data = reports_service.get_student_report_data(
+            conn, student_id, session_id=session_id, exam_cycle_id=exam_cycle_id,
+            start_date=start_date, end_date=end_date, current_user=user
+        )
+        conn.close()
+        if not data:
+            return jsonify({"error": "Student not found."}), 404
+        return jsonify({"success": True, "scope": "student", "data": data, "selectedModules": selected_modules})
+    else:
+        if not class_id:
+            conn.close()
+            return jsonify({"error": "class_id is required for class report preview."}), 400
+        data = reports_service.get_class_report_data(
+            conn, class_id, section_id=section_id, session_id=session_id,
+            exam_cycle_id=exam_cycle_id, start_date=start_date, end_date=end_date, current_user=user
+        )
+        conn.close()
+        return jsonify({"success": True, "scope": "class", "data": data, "selectedModules": selected_modules})
+
+@app.route("/api/reports/export-excel", methods=["GET"])
+@require_auth()
+def api_reports_export_excel():
+    scope = request.args.get("scope", "student").lower()
+    student_id = request.args.get("student_id")
+    class_id = request.args.get("class_id")
+    section_id = request.args.get("section_id")
+    session_id = request.args.get("session_id")
+    exam_cycle_id = request.args.get("exam_cycle_id")
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    modules_str = request.args.get("modules", "academics,attendance,fees,conduct")
+    selected_modules = [m.strip().lower() for m in modules_str.split(",") if m.strip()]
+
+    conn = get_db()
+    user = g.current_user
+
+    # RBAC checks
+    if user["role"] == "parent":
+        if scope != "student":
+            conn.close()
+            return jsonify({"error": "Parents can only export individual reports."}), 403
+        stids = user.get("linked_student_ids") or []
+        if isinstance(stids, str):
+            stids = json.loads(stids) if stids.startswith("[") else [stids]
+        if student_id not in stids:
+            conn.close()
+            return jsonify({"error": "Access denied."}), 403
+
+    if user["role"] == "teacher" and user.get("linked_staff_id"):
+        c = conn.cursor()
+        c.execute("SELECT DISTINCT class_id FROM staff_assignments WHERE staff_id = ?", (user["linked_staff_id"],))
+        allowed_cls = {r[0] for r in c.fetchall()}
+        if scope == "class" and class_id not in allowed_cls:
+            conn.close()
+            return jsonify({"error": "Access denied."}), 403
+        elif scope == "student":
+            c.execute("SELECT current_class_id FROM students WHERE id = ?", (student_id,))
+            st_row = c.fetchone()
+            if not st_row or st_row[0] not in allowed_cls:
+                conn.close()
+                return jsonify({"error": "Access denied."}), 403
+        if "fees" in selected_modules:
+            selected_modules.remove("fees")
+
+    try:
+        import backend.reports_service as reports_service
+    except ImportError:
+        import reports_service
+
+    if scope == "student":
+        if not student_id:
+            conn.close()
+            return jsonify({"error": "student_id is required."}), 400
+        data = reports_service.get_student_report_data(
+            conn, student_id, session_id=session_id, exam_cycle_id=exam_cycle_id,
+            start_date=start_date, end_date=end_date, current_user=user
+        )
+        if not data:
+            conn.close()
+            return jsonify({"error": "Student not found."}), 404
+
+        wb = reports_service.generate_student_report_workbook(data, selected_modules)
+        stu = data["student"]
+        ascii_name = re.sub(r'[^\x00-\x7F]+', '', stu["name"]).strip()
+        ascii_name = re.sub(r'[^A-Za-z0-9_\-]', '_', ascii_name).strip() or "Student"
+        safe_adm = re.sub(r'[^A-Za-z0-9_\-]', '_', str(stu.get("admission_no") or stu.get("roll_number"))).strip()
+        filename = f"StudentReport_{safe_adm}_{ascii_name}.xlsx"
+        utf8_filename = f"StudentReport_{safe_adm}_{stu['name']}.xlsx"
+        encoded_utf8 = urllib.parse.quote(utf8_filename)
+        content_disp = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_utf8}'
+
+        log_activity(conn, user["id"], user["role"], "EXPORT_STUDENT_REPORT_EXCEL", "students", student_id,
+                     {"student_name": stu["name"], "scope": "student"}, request.remote_addr)
+    else:
+        if not class_id:
+            conn.close()
+            return jsonify({"error": "class_id is required."}), 400
+        data = reports_service.get_class_report_data(
+            conn, class_id, section_id=section_id, session_id=session_id,
+            exam_cycle_id=exam_cycle_id, start_date=start_date, end_date=end_date, current_user=user
+        )
+        wb = reports_service.generate_class_report_workbook(data, selected_modules)
+        safe_cls = re.sub(r'[^A-Za-z0-9_\-]', '_', str(class_id))
+        safe_sec = re.sub(r'[^A-Za-z0-9_\-]', '_', str(section_id)) if section_id and section_id.lower() != 'all' else ''
+        sec_str = f"_{safe_sec}" if safe_sec else ""
+        filename = f"ClassReport_{safe_cls}{sec_str}.xlsx"
+        content_disp = f'attachment; filename="{filename}"'
+
+        log_activity(conn, user["id"], user["role"], "EXPORT_CLASS_REPORT_EXCEL", "classes", class_id,
+                     {"class_id": class_id, "section": section_id, "student_count": data["studentCount"]}, request.remote_addr)
+
+    conn.commit()
+    conn.close()
+
+    out_io = io.BytesIO()
+    wb.save(out_io)
+    out_io.seek(0)
+
+    return Response(
+        out_io.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": content_disp,
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
+@app.route("/api/reports/bulk-export", methods=["POST"])
+@require_auth()
+def api_reports_bulk_export():
+    data = request.get_json(force=True) or {}
+    export_type = data.get("export_type", "bulk_zip").lower()
+    class_id = data.get("class_id")
+    section_id = data.get("section_id")
+    session_id = data.get("session_id")
+    exam_cycle_id = data.get("exam_cycle_id")
+    selected_modules = data.get("modules", ["academics", "attendance", "fees", "conduct"])
+
+    if not class_id:
+        return jsonify({"error": "class_id is required for bulk export."}), 400
+
+    conn = get_db()
+    user = g.current_user
+
+    # RBAC checks
+    if user["role"] == "parent":
+        conn.close()
+        return jsonify({"error": "Bulk class exports are restricted to school staff."}), 403
+
+    if user["role"] == "teacher" and user.get("linked_staff_id"):
+        c = conn.cursor()
+        c.execute("SELECT DISTINCT class_id FROM staff_assignments WHERE staff_id = ?", (user["linked_staff_id"],))
+        allowed_cls = {r[0] for r in c.fetchall()}
+        if class_id not in allowed_cls:
+            conn.close()
+            return jsonify({"error": "Access denied to unassigned class."}), 403
+        if "fees" in selected_modules:
+            selected_modules.remove("fees")
+
+    try:
+        import backend.reports_service as reports_service
+    except ImportError:
+        import reports_service
+
+    if export_type == "class_individual_sheets":
+        class_data = reports_service.get_class_report_data(
+            conn, class_id, section_id=section_id, session_id=session_id,
+            exam_cycle_id=exam_cycle_id, current_user=user
+        )
+        wb = reports_service.generate_class_with_individual_sheets(
+            conn, class_data, selected_modules=selected_modules, current_user=user
+        )
+        out_io = io.BytesIO()
+        wb.save(out_io)
+        out_io.seek(0)
+        sec_str = f"_{section_id}" if section_id and section_id.lower() != "all" else ""
+        filename = f"Class_{class_id}{sec_str}_With_Individual_Dossiers.xlsx"
+
+        log_activity(conn, user["id"], user["role"], "EXPORT_CLASS_INDIVIDUAL_SHEETS", "classes", class_id,
+                     {"class_id": class_id, "student_count": class_data["studentCount"]}, request.remote_addr)
+        conn.commit()
+        conn.close()
+
+        return Response(
+            out_io.getvalue(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    else:  # bulk_zip
+        zip_bytes, manifest = reports_service.generate_bulk_student_zip(
+            conn, class_id, section_id=section_id, session_id=session_id,
+            exam_cycle_id=exam_cycle_id, selected_modules=selected_modules, current_user=user
+        )
+        sec_str = f"_{section_id}" if section_id and section_id.lower() != "all" else ""
+        filename = f"StudentReports_Bulk_Class_{class_id}{sec_str}.zip"
+
+        log_activity(conn, user["id"], user["role"], "EXPORT_BULK_ZIP", "classes", class_id,
+                     {"class_id": class_id, "total": manifest["total_students"], "generated": manifest["generated_count"]}, request.remote_addr)
+        conn.commit()
+        conn.close()
+
+        return Response(
+            zip_bytes,
+            mimetype="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+
 
 # ==============================================================================
 # 03B — GEMINI AI RELAY & PROXY (Auto-configured endpoint)

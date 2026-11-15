@@ -3608,12 +3608,27 @@
         </div>
 
         <div class="stu-detail-links-bar no-print">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-stu-export-report-excel" style="background:var(--primary); color:#ffffff; font-weight:700;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Excel Report
+          </button>
           <button type="button" class="btn btn-outline btn-sm" id="btn-stu-open-grand">Open Grand Student Report &rarr;</button>
           <button type="button" class="btn btn-outline btn-sm" id="btn-stu-open-health">Open Health &amp; Medical Report &rarr;</button>
           <button type="button" class="btn btn-outline btn-sm" id="btn-stu-open-violations">Open Violation Record &rarr;</button>
         </div>
       </div>
     `;
+
+    const exportReportBtn = document.getElementById('btn-stu-export-report-excel');
+    if (exportReportBtn) {
+      exportReportBtn.addEventListener('click', () => {
+        if (window.HesERP && window.HesERP.exportStudentReportExcel) {
+          window.HesERP.exportStudentReportExcel(s.id);
+        } else {
+          window.open(`/api/reports/export-excel?scope=student&student_id=${s.id}`, '_blank');
+        }
+      });
+    }
 
     const editBtn = document.getElementById('btn-stu-edit');
     if (editBtn) editBtn.addEventListener('click', () => openStudentDetailForm(s));
@@ -4357,6 +4372,10 @@
               </div>
             </div>
             <div class="dossier-actions no-print">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-grand-export-excel" style="background:var(--primary); color:#ffffff; font-weight:700;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="vertical-align:middle; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Excel
+              </button>
               <button type="button" class="btn btn-outline btn-sm" id="btn-print-grand-report">&#128424; Print Report</button>
               ${waNumber ? `<a class="btn btn-success btn-sm" href="https://wa.me/${escapeHTML(waNumber)}?text=${escapeHTML(waSummaryText)}" target="_blank" rel="noopener">Share on WhatsApp</a>` : ''}
             </div>
@@ -4603,6 +4622,17 @@
     const printBtn = document.getElementById('btn-print-grand-report');
     if (printBtn) {
       printBtn.addEventListener('click', () => window.print());
+    }
+
+    const grandExcelBtn = document.getElementById('btn-grand-export-excel');
+    if (grandExcelBtn) {
+      grandExcelBtn.addEventListener('click', () => {
+        if (window.HesERP && window.HesERP.exportStudentReportExcel) {
+          window.HesERP.exportStudentReportExcel(s.id);
+        } else {
+          window.open(`/api/reports/export-excel?scope=student&student_id=${s.id}`, '_blank');
+        }
+      });
     }
 
     content.querySelectorAll('[data-grange]').forEach((btn) => {
