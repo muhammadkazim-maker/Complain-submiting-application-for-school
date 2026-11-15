@@ -473,6 +473,63 @@ def api_student_id_card(student_id):
         "student": dict(stu)
     })
 
+@app.route("/api/students/reset-operational-records", methods=["POST"])
+@require_auth(allowed_roles=["owner", "admin"])
+def api_reset_student_records():
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        tables_to_purge = [
+            "attendance_classes",
+            "attendance_prep",
+            "attendance_staff",
+            "discipline_violations",
+            "digital_diary",
+            "exam_marks",
+            "exam_subjects",
+            "challan_items",
+            "fee_challans",
+            "fee_payments",
+            "payment_proofs",
+            "journal_items",
+            "journal_entries",
+            "payroll_items",
+            "payroll_runs",
+            "whatsapp_queue",
+            "health_records",
+            "inquiries",
+            "inquiry_messages",
+            "leave_requests",
+            "staff_advances",
+            "activity_logs"
+        ]
+        purged = {}
+        for tbl in tables_to_purge:
+            exists = c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tbl,)).fetchone()
+            if exists:
+                cnt = c.execute(f'SELECT COUNT(*) FROM "{tbl}"').fetchone()[0]
+                c.execute(f'DELETE FROM "{tbl}"')
+                purged[tbl] = cnt
+
+        stu_cnt = c.execute("SELECT COUNT(*) FROM students").fetchone()[0]
+        fam_cnt = c.execute("SELECT COUNT(*) FROM families").fetchone()[0]
+        log_activity(conn, g.current_user["id"], g.current_user["role"], "PURGE_OPERATIONAL_RECORDS", "system", "all",
+                     {"preserved_students": stu_cnt, "preserved_families": fam_cnt, "purged": purged}, request.remote_addr)
+        conn.commit()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "message": "All student operational records deleted. Personal profiles and directory preserved.",
+            "studentsPreserved": stu_cnt,
+            "familiesPreserved": fam_cnt,
+            "purgedCounts": purged
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
 # ==============================================================================
 # 01 — FEES, CHALLANS & DIGITAL PAYMENTS
 # ==============================================================================

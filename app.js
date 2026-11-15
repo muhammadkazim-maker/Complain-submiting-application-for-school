@@ -4933,6 +4933,29 @@
       });
     }
 
+    const clearRecordsBtn = document.getElementById('btn-clear-student-records');
+    if (clearRecordsBtn) {
+      clearRecordsBtn.addEventListener('click', () => {
+        closeUtilityMenu(false);
+        openConfirmDialog({
+          title: 'Clear Student Operational Records?',
+          message: 'Are you sure you want to delete all student operational records (attendance, homework, violations, monthly tests, and fees)? ALL 134 STUDENT PROFILES, ROLL NUMBERS, FATHER NAMES, AND CONTACT NUMBERS WILL REMAIN 100% INTACT.',
+          confirmLabel: 'Clear Records (Keep Profiles)',
+          confirmBtnClass: 'btn-danger',
+          onConfirm: async () => {
+            try {
+              await window.AppStorage.clearStudentOperationalRecords();
+              showToast('Operational records cleared! All 134 student profiles preserved.', 'success');
+              switchScreen(state.currentScreen, true);
+              await updateHomeStats();
+            } catch (err) {
+              showToast(err.message || 'Error clearing records.', 'error');
+            }
+          }
+        });
+      });
+    }
+
     // Delegated Enter / Space Keyboard Activation for Card Grids & Banners
     const mainEl = document.getElementById('main-content');
     if (mainEl) {

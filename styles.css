@@ -977,6 +977,14 @@ body {
   background: var(--bg-subtle);
 }
 
+.utility-item-danger {
+  color: var(--danger);
+}
+
+.utility-item-danger:hover {
+  background: var(--danger-soft) !important;
+}
+
 .utility-item-text {
   display: flex;
   flex-direction: column;

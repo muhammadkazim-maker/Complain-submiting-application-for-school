@@ -2195,6 +2195,23 @@
 
     // Clean up old demo violations if they reference non-existent demo students, keep real data
     async migrateIfNeeded() {
+      // 1. One-time operational records purge (preserves all 134 students, contacts, classes, father names)
+      const PURGE_KEY = 'hes_operational_records_purged_v1';
+      try {
+        if (!localStorage.getItem(PURGE_KEY)) {
+          localStorage.setItem(KEYS.COMPLAINTS, JSON.stringify([]));
+          localStorage.setItem(KEYS.HOMEWORKS, JSON.stringify([]));
+          localStorage.setItem(KEYS.TESTS, JSON.stringify([]));
+          localStorage.setItem(KEYS.CLASS_ATTENDANCE, JSON.stringify([]));
+          localStorage.setItem(KEYS.PREP_ATTENDANCE, JSON.stringify([]));
+          localStorage.setItem(KEYS.HEALTH_RECORDS, JSON.stringify([]));
+          localStorage.setItem(PURGE_KEY, new Date().toISOString());
+          console.info('Auto-purge complete: Student operational records deleted, student directory preserved.');
+        }
+      } catch (purgeErr) {
+        console.warn('Auto-purge note:', purgeErr);
+      }
+
       const complaints = load(KEYS.COMPLAINTS, []);
       if (complaints.length > 0 && complaints.some((c) => c.id && c.id.startsWith('cmp_demo_'))) {
         // Remove old synthetic demo complaints so only real school records/user entries remain
@@ -2206,6 +2223,47 @@
         localStorage.removeItem('sct_students_v1');
       } catch (e) {
         console.error('Legacy cleanup error:', e);
+      }
+    },
+
+    /* ========================================================================
+       Reset Student Operational Records (Keeps Student Info & Profiles Intact)
+       ======================================================================== */
+    async clearStudentOperationalRecords() {
+      try {
+        // Clears transactional / operational history
+        localStorage.setItem(KEYS.COMPLAINTS, JSON.stringify([]));
+        localStorage.setItem(KEYS.HOMEWORKS, JSON.stringify([]));
+        localStorage.setItem(KEYS.TESTS, JSON.stringify([]));
+        localStorage.setItem(KEYS.CLASS_ATTENDANCE, JSON.stringify([]));
+        localStorage.setItem(KEYS.PREP_ATTENDANCE, JSON.stringify([]));
+        localStorage.setItem(KEYS.HEALTH_RECORDS, JSON.stringify([]));
+        localStorage.setItem('hes_operational_records_purged_v1', new Date().toISOString());
+
+        // Notify backend if connected
+        try {
+          const token = localStorage.getItem('hes_auth_token_v1');
+          if (token) {
+            await fetch('/api/students/reset-operational-records', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+          }
+        } catch (backendErr) {
+          console.warn('Backend purge note:', backendErr);
+        }
+
+        this._notifyChange();
+        return {
+          success: true,
+          message: 'All student operational records deleted. Personal information and directory preserved.'
+        };
+      } catch (e) {
+        console.error('Failed to clear operational records:', e);
+        throw e;
       }
     },
 
